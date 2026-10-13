@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- carpetas para compartir los txt -->
+<paths>
+    <cache-path name="exportes" path="exportes/" />
+    <files-path name="respaldos" path="respaldos/" />
+</paths>

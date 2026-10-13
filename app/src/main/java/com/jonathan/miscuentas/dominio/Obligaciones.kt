@@ -1,0 +1,219 @@
+package com.jonathan.miscuentas.dominio
+
+import java.time.LocalDate
+import java.time.YearMonth
+
+object Origen {
+    const val DEUDA = "deuda"
+    const val GASTO = "gasto"
+    const val PRESUPUESTO = "presupuesto"
+    const val EVENTO = "evento"
+    const val INGRESO = "ingreso"
+}
+
+object Estado {
+    const val SIN_VALOR = "—"
+    const val PAGADO = "Pagado"
+    const val VENCIDO_PARCIAL = "Vencido parcial"
+    const val VENCIDO = "Vencido"
+    const val PARCIAL = "Parcial"
+    const val PENDIENTE = "Pendiente"
+    val todos = listOf(PAGADO, VENCIDO_PARCIAL, VENCIDO, PARCIAL, PENDIENTE)
+}
+
+data class Obligacion(
+    val clave: String,
+    val tipoOrigen: String,
+    val origenId: String,
+    val fecha: LocalDate,
+    val concepto: String,
+    val categoria: String,
+    val presupuestado: Long,
+    val pagado: Long = 0,
+    val deudaId: String? = null,
+    val aviso: String? = null,
+) {
+    val mes: YearMonth get() = YearMonth.from(fecha)
+    val falta: Long get() = maxOf(0, presupuestado - pagado)
+
+    fun estado(hoy: LocalDate): String = Calculos.estado(presupuestado, pagado, fecha, hoy)
+}
+
+data class IngresoEsperado(
+    val clave: String,
+    val programadoId: String,
+    val fecha: LocalDate,
+    val concepto: String,
+    val tipo: String,
+    val monto: Long,
+    val recibido: Long,
+    val esEstimado: Boolean,
+)
+
+object Obligaciones {
+
+    fun clave(tipo: String, id: String, fecha: LocalDate) = "$tipo:$id:${Fechas.iso(fecha)}"
+
+    // genera los pagos del rango, nunca antes de la fecha de inicio
+    fun generar(datos: Datos, desde: LocalDate, hasta: LocalDate): List<Obligacion> {
+        val inicio = Fechas.leer(datos.config.fechaInicio) ?: desde
+        val d = maxOf(desde, inicio)
+        if (hasta < d) return emptyList()
+        val base = mutableListOf<Obligacion>()
+        datos.deudas.filter { it.activa }.forEach { base += deThisDeuda(it, d, hasta, inicio) }
+        datos.gastosFijos.filter { it.activo }.forEach { base += deGasto(it, d, hasta, datos.config) }
+        datos.presupuestos.filter { it.activo }.forEach { base += dePresupuesto(it, d, hasta) }
+        datos.eventos.forEach { ev ->
+            val f = Fechas.leer(ev.fecha) ?: return@forEach
+            if (f in d..hasta) {
+                base += Obligacion(
+                    clave(Origen.EVENTO, ev.id, f), Origen.EVENTO, ev.id, f, ev.nombre,
+                    ev.categoria.ifBlank { Categorias.NO_PLANEADO }, ev.monto, deudaId = ev.deudaId
+                )
+            }
+        }
+        return conPagos(base, datos.movimientos).sortedWith(compareBy({ it.fecha }, { it.concepto }))
+    }
+
+    private fun meses(desde: LocalDate, hasta: LocalDate): Sequence<YearMonth> =
+        generateSequence(YearMonth.from(desde)) { it.plusMonths(1) }.takeWhile { it <= YearMonth.from(hasta) }
+
+    private fun deThisDeuda(deuda: Deuda, desde: LocalDate, hasta: LocalDate, inicio: LocalDate): List<Obligacion> {
+        val lista = mutableListOf<Obligacion>()
+        val fin = Fechas.leer(deuda.fechaFin)
+        if (deuda.cuotaMensual > 0 && deuda.diaPago != null) {
+            // primera cuota desde la fecha de inicio para contar las que faltan
+            val primerMes = YearMonth.from(inicio).let { ym ->
+                if (Fechas.diaEnMes(ym, deuda.diaPago) < inicio) ym.plusMonths(1) else ym
+            }
+            val restantes = if (deuda.cuotasTotales != null && deuda.cuotasPagadas != null)
+                deuda.cuotasTotales - deuda.cuotasPagadas else null
+            for (ym in meses(desde, hasta)) {
+                val f = Fechas.diaEnMes(ym, deuda.diaPago)
+                if (f < desde || f > hasta || f < inicio) continue
+                if (fin != null && f > fin) continue
+                if (restantes != null && Fechas.mesesEntre(primerMes, ym) >= restantes) continue
+                lista += Obligacion(
+                    clave(Origen.DEUDA, deuda.id, f), Origen.DEUDA, deuda.id, f,
+                    deuda.nombre, Categorias.DEUDA, deuda.cuotaMensual, deudaId = deuda.id
+                )
+            }
+        } else if (fin != null && fin in desde..hasta) {
+            // pago unico en la fecha fin
+            val monto = deuda.saldoExtracto ?: deuda.saldoInicial
+            if (monto > 0) {
+                lista += Obligacion(
+                    clave(Origen.DEUDA, deuda.id, fin), Origen.DEUDA, deuda.id, fin,
+                    deuda.nombre, Categorias.DEUDA, monto, deudaId = deuda.id
+                )
+            }
+        }
+        return lista
+    }
+
+    private fun deGasto(g: GastoFijo, desde: LocalDate, hasta: LocalDate, config: Config): List<Obligacion> {
+        val lista = mutableListOf<Obligacion>()
+        val aviso = if (!g.diaConfirmado) "confirma este día" else null
+        val categoria = if (g.frecuencia == Frecuencia.SEMANAL) Categorias.SEMANAL else Categorias.GASTO_FIJO
+        fun agregar(f: LocalDate) {
+            if (f in desde..hasta) lista += Obligacion(
+                clave(Origen.GASTO, g.id, f), Origen.GASTO, g.id, f, g.nombre, categoria, g.valor, aviso = aviso
+            )
+        }
+        when (g.frecuencia) {
+            Frecuencia.SEMANAL -> {
+                val dia = g.diaSemana ?: 6
+                var f = desde
+                while (Fechas.indiceDiaSemana(f) != dia) f = f.plusDays(1)
+                while (f <= hasta) {
+                    agregar(f); f = f.plusWeeks(1)
+                }
+            }
+            Frecuencia.QUINCENAL -> meses(desde, hasta).forEach { ym ->
+                agregar(Fechas.diaEnMes(ym, 15)); agregar(ym.atEndOfMonth())
+            }
+            else -> meses(desde, hasta).forEach { ym -> agregar(Fechas.diaEnMes(ym, g.diaPago ?: 1)) }
+        }
+        return lista
+    }
+
+    private fun dePresupuesto(p: Presupuesto, desde: LocalDate, hasta: LocalDate): List<Obligacion> {
+        val lista = mutableListOf<Obligacion>()
+        val pd = Fechas.leer(p.fechaDesde)
+        val ph = Fechas.leer(p.fechaHasta)
+        val categoria = p.categoria.ifBlank { Categorias.NO_PLANEADO }
+        fun agregar(f: LocalDate) {
+            if (f !in desde..hasta) return
+            if (p.periodicidad != Periodicidad.UNICO) {
+                if (pd != null && f < pd) return
+                if (ph != null && f > ph) return
+            }
+            lista += Obligacion(clave(Origen.PRESUPUESTO, p.id, f), Origen.PRESUPUESTO, p.id, f, p.nombre, categoria, p.monto)
+        }
+        when (p.periodicidad) {
+            Periodicidad.QUINCENAL -> meses(desde, hasta).forEach { ym ->
+                agregar(Fechas.diaEnMes(ym, 15)); agregar(ym.atEndOfMonth())
+            }
+            Periodicidad.MENSUAL -> meses(desde, hasta).forEach { ym -> agregar(Fechas.diaEnMes(ym, pd?.dayOfMonth ?: 1)) }
+            else -> (Fechas.leer(p.fecha) ?: pd)?.let { agregar(it) }
+        }
+        return lista
+    }
+
+    // suma los pagos de cada obligacion; si cambio el dia del origen se pasan al mismo mes
+    fun conPagos(base: List<Obligacion>, movimientos: List<Movimiento>): List<Obligacion> {
+        val porClave = base.associateBy { it.clave }
+        val pagos = mutableMapOf<String, Long>()
+        movimientos.forEach { m ->
+            val c = m.claveObligacion ?: return@forEach
+            val destino = if (porClave.containsKey(c)) c else reasignar(c, base)
+            if (destino != null) pagos[destino] = (pagos[destino] ?: 0) + m.monto
+        }
+        return base.map { it.copy(pagado = pagos[it.clave] ?: 0) }
+    }
+
+    private fun reasignar(clave: String, base: List<Obligacion>): String? {
+        val partes = clave.split(':')
+        if (partes.size != 3) return null
+        val f = Fechas.leer(partes[2]) ?: return null
+        val candidatas = base.filter { it.tipoOrigen == partes[0] && it.origenId == partes[1] && it.mes == YearMonth.from(f) }
+        return candidatas.minByOrNull { kotlin.math.abs(it.fecha.toEpochDay() - f.toEpochDay()) }?.clave
+    }
+
+    // la quincena o periodo del presupuesto al que cae un gasto de esa fecha
+    fun instanciaPresupuesto(datos: Datos, presupuestoId: String, fecha: LocalDate): Obligacion? {
+        val p = datos.presupuestos.firstOrNull { it.id == presupuestoId && it.activo } ?: return null
+        val ym = YearMonth.from(fecha)
+        val delMes = generar(datos, ym.atDay(1), ym.atEndOfMonth()).filter { it.tipoOrigen == Origen.PRESUPUESTO && it.origenId == p.id }
+        return when (p.periodicidad) {
+            Periodicidad.QUINCENAL -> delMes.firstOrNull { if (fecha.dayOfMonth <= 15) it.fecha.dayOfMonth == 15 else it.fecha.dayOfMonth > 15 }
+            Periodicidad.MENSUAL -> delMes.firstOrNull()
+            else -> {
+                val desde = Fechas.leer(p.fechaDesde) ?: Fechas.leer(p.fecha)
+                val hasta = Fechas.leer(p.fechaHasta) ?: desde
+                if (desde != null && hasta != null && fecha in desde..hasta) {
+                    generar(datos, desde, desde).firstOrNull { it.origenId == p.id }
+                } else null
+            }
+        }
+    }
+
+    // ingresos programados del rango con lo que ya se recibio
+    fun ingresosEsperados(datos: Datos, desde: LocalDate, hasta: LocalDate): List<IngresoEsperado> {
+        val inicio = Fechas.leer(datos.config.fechaInicio) ?: desde
+        val d = maxOf(desde, inicio)
+        val lista = mutableListOf<IngresoEsperado>()
+        datos.ingresosProgramados.filter { it.activo }.forEach { ip ->
+            val fechas = when (ip.frecuencia) {
+                FrecuenciaIngreso.UNICO -> listOfNotNull(Fechas.leer(ip.fecha))
+                else -> meses(d, hasta).map { Fechas.diaEnMes(it, ip.dia ?: 30) }.toList()
+            }
+            fechas.filter { it in d..hasta }.forEach { f ->
+                val c = clave(Origen.INGRESO, ip.id, f)
+                val recibido = datos.ingresos.filter { it.claveIngresoProgramado == c }.sumOf { it.monto }
+                lista += IngresoEsperado(c, ip.id, f, ip.nombre, ip.tipo, ip.monto, recibido, ip.esEstimado)
+            }
+        }
+        return lista.sortedBy { it.fecha }
+    }
+}
