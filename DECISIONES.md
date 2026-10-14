@@ -57,7 +57,8 @@ Lo que se decidió sin estar definido en el documento original.
 - Un pago puede marcarse como completo aunque el valor sea distinto al presupuestado (recibos de servicios o tarjetas). Ese mes el presupuestado pasa a ser lo pagado y el original se guarda como estimado para mostrarlo.
 - Si se marca como abono queda debiendo la diferencia. Por defecto sale en pago completo.
 - Los presupuestos no tienen esta opción porque son topes, no deudas.
-- La quincena va del 1 al 15 y del 16 al fin de mes. En Inicio salen todos sus pagos en orden, los de antes sin pagar aparte, y "Pagar todo" registra lo que falta de cada uno con la fecha de hoy.
+- La quincena se arma con los días del sueldo: con el del 15 se paga del 15 al 29 y con el del 30 del 30 al 14 (en febrero el del 30 llega el 28). Si no hay dos sueldos fijos se usa del 1 al 15 y del 16 a fin de mes. El Reparto usa la misma regla para las deudas.
+- En Registrar e Inicio salen primero los pagos atrasados, luego todos los del periodo actual en orden y después todo el periodo siguiente, sin límite. "Pagar todo" registra lo que falta de los atrasados y del periodo actual con la fecha de hoy.
 - Base de datos versión 2: la migración agrega la columna `liquida` a movimientos sin borrar nada.
 - Un pago ya guardado se puede cambiar entre pago completo y abono desde Historial.
 

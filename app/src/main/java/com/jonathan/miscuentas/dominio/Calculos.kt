@@ -146,8 +146,11 @@ object Calculos {
         val ing15 = activos.filter { (it.dia ?: 30) <= 15 }.sumOf { it.monto }
         val ing30 = activos.filter { (it.dia ?: 30) > 15 }.sumOf { it.monto }
         val deudas = datos.deudas.filter { it.activa && it.cuotaMensual > 0 && it.diaPago != null }
-        val d15 = deudas.filter { it.diaPago!! in 3..17 }.sumOf { it.cuotaMensual }
-        val d30 = deudas.filter { it.diaPago!! !in 3..17 }.sumOf { it.cuotaMensual }
+        // con dos sueldos fijos va con el primero lo que cae entre los dos dias (15 al 29)
+        val dias = Obligaciones.diasSueldo(datos)
+        fun conPrimero(dia: Int) = if (dias.size == 2) dia >= dias[0] && dia < dias[1] else dia in 3..17
+        val d15 = deudas.filter { conPrimero(it.diaPago!!) }.sumOf { it.cuotaMensual }
+        val d30 = deudas.filter { !conPrimero(it.diaPago!!) }.sumOf { it.cuotaMensual }
         var g15 = 0L
         var g30 = 0L
         datos.gastosFijos.filter { it.activo }.forEach { g ->

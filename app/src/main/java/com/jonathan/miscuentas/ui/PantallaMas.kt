@@ -320,7 +320,10 @@ fun PantallaReparto(vm: AppViewModel, datos: Datos, alVolver: () -> Unit) {
             BloqueQuincena("Quincena 15", q.ingresos15, q.deudas15, q.gastos15, q.presupuestos15, q.sobra15)
             Spacer(Modifier.height(10.dp))
             BloqueQuincena("Quincena 30", q.ingresos30, q.deudas30, q.gastos30, q.presupuestos30, q.sobra30)
-            Text("Deudas con día de pago entre el 3 y el 17 van en la quincena 15; el resto en la 30. Los gastos semanales se calculan con ${String.format(java.util.Locale.US, "%.2f", datos.config.semanasPorMes)} semanas por mes.",
+            val dias = Obligaciones.diasSueldo(datos)
+            val regla = if (dias.size == 2) "Las deudas que se pagan del ${dias[0]} al ${dias[1] - 1} van con el sueldo del ${dias[0]}; el resto con el del ${dias[1]}."
+                else "Deudas con día de pago entre el 3 y el 17 van en la quincena 15; el resto en la 30."
+            Text("$regla Los gastos fijos van según su quincena asignada. Los gastos semanales se calculan con ${String.format(java.util.Locale.US, "%.2f", datos.config.semanasPorMes)} semanas por mes.",
                 fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp))
         }
     }

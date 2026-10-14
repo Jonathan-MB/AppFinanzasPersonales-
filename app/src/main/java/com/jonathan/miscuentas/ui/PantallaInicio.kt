@@ -115,14 +115,19 @@ fun Cifra(titulo: String, valor: String, color: Color, modifier: Modifier = Modi
     }
 }
 
+// ej. "Ahora: con el sueldo del 30 (30 sept al 14 oct)"
+fun tituloPeriodo(cuando: String, p: Periodo): String {
+    val rango = "${Formato.fechaCorta(p.desde)} al ${Formato.fechaCorta(p.hasta)}"
+    return if (p.diaSueldo != null) "$cuando: con el sueldo del ${p.diaSueldo} ($rango)" else "$cuando: quincena del $rango"
+}
+
 // la quincena que sigue completa, para ver lo que viene
 @Composable
 fun SeccionProximaQuincena(vm: AppViewModel, datos: Datos, irMonto: () -> Unit) {
     val hoy = vm.hoy()
-    val siguiente = Obligaciones.quincena(hoy).second.plusDays(1)
-    val (desde, hasta) = Obligaciones.quincena(siguiente)
-    val pagos = Obligaciones.pagosQuincena(datos, siguiente).filter { it.falta > 0 }
-    TituloSeccion("Próxima quincena (${desde.dayOfMonth} al ${Formato.fechaCorta(hasta)})")
+    val p = Obligaciones.periodo(datos, Obligaciones.periodo(datos, hoy).hasta.plusDays(1))
+    val pagos = Obligaciones.pagosQuincena(datos, p.desde).filter { it.falta > 0 }
+    TituloSeccion(tituloPeriodo("Después", p))
     if (pagos.isEmpty()) Vacio("No hay pagos en la próxima quincena.")
     else FilaDato("Total", Formato.pesos(pagos.sumOf { it.falta }), negrita = true)
     pagos.forEach { o -> FilaPago(o, hoy) { vm.seleccion = Seleccion.Pago(o); irMonto() } }
@@ -133,13 +138,13 @@ fun SeccionProximaQuincena(vm: AppViewModel, datos: Datos, irMonto: () -> Unit) 
 fun SeccionQuincena(vm: AppViewModel, datos: Datos, irMonto: () -> Unit, irDetalle: (Obligacion) -> Unit) {
     val hoy = vm.hoy()
     val confirmar = LocalConfirmador.current
-    val (desde, hasta) = Obligaciones.quincena(hoy)
+    val p = Obligaciones.periodo(datos, hoy)
     val pagos = Obligaciones.pagosQuincena(datos, hoy)
     val inicio = Fechas.leer(datos.config.fechaInicio) ?: hoy
-    val atrasados = Obligaciones.generar(datos, inicio, desde.minusDays(1)).filter { it.falta > 0 && it.tipoOrigen != Origen.PRESUPUESTO }
+    val atrasados = Obligaciones.generar(datos, inicio, p.desde.minusDays(1)).filter { it.falta > 0 && it.tipoOrigen != Origen.PRESUPUESTO }
     val pendientes = atrasados + pagos.filter { it.falta > 0 }
 
-    TituloSeccion("Pagos de esta quincena (${desde.dayOfMonth} al ${Formato.fechaCorta(hasta)})")
+    TituloSeccion(tituloPeriodo("Ahora", p))
     Tarjeta {
         FilaDato("Total de la quincena", Formato.pesos(pagos.sumOf { it.presupuestado }), negrita = true)
         FilaDato("Pagado", Formato.pesos(pagos.sumOf { it.pagado }), Colores.verde)

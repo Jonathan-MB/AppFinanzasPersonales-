@@ -73,9 +73,24 @@ class CalculosTest {
         val (desde, hasta) = Obligaciones.quincena(LocalDate.of(2026, 11, 20))
         assertEquals(LocalDate.of(2026, 11, 16), desde)
         assertEquals(LocalDate.of(2026, 11, 30), hasta)
+        // con sueldos el 15 y el 30, el 3 de noviembre se paga con el del 30 de octubre
         val pagos = Obligaciones.pagosQuincena(datos, LocalDate.of(2026, 11, 3))
-        assertTrue(pagos.all { it.fecha.dayOfMonth <= 15 && it.tipoOrigen != Origen.PRESUPUESTO })
+        assertTrue(pagos.all { it.fecha in LocalDate.of(2026, 10, 30)..LocalDate.of(2026, 11, 14) && it.tipoOrigen != Origen.PRESUPUESTO })
         assertTrue(pagos.any { it.concepto == "Arriendo" })
+    }
+
+    @Test
+    fun periodoPorSueldo() {
+        fun p(a: Int, m: Int, d: Int) = Obligaciones.periodo(datos, LocalDate.of(a, m, d))
+        assertEquals(Periodo(LocalDate.of(2026, 9, 30), LocalDate.of(2026, 10, 14), 30), p(2026, 10, 14))
+        assertEquals(Periodo(LocalDate.of(2026, 10, 15), LocalDate.of(2026, 10, 29), 15), p(2026, 10, 15))
+        assertEquals(Periodo(LocalDate.of(2026, 10, 30), LocalDate.of(2026, 11, 14), 30), p(2026, 10, 31))
+        // febrero: el sueldo del 30 llega el 28
+        assertEquals(Periodo(LocalDate.of(2027, 2, 15), LocalDate.of(2027, 2, 27), 15), p(2027, 2, 20))
+        assertEquals(Periodo(LocalDate.of(2027, 2, 28), LocalDate.of(2027, 3, 14), 30), p(2027, 3, 1))
+        // sin sueldos fijos queda la quincena del calendario
+        val sin = datos.copy(ingresosProgramados = emptyList())
+        assertEquals(Periodo(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 15), null), Obligaciones.periodo(sin, LocalDate.of(2026, 10, 14)))
     }
 
     @Test
@@ -147,8 +162,9 @@ class CalculosTest {
         val q = Calculos.reparto(datos, YearMonth.of(2026, 11))
         assertEquals(1500000L, q.ingresos15)
         assertEquals(1500000L, q.ingresos30)
-        // dias 15 y 16 van en la quincena 15
-        assertEquals(100000L + 300000, q.deudas15)
+        // con sueldos el 15 y el 30 van con el del 15 las deudas de los dias 15, 16, 19 y 21
+        assertEquals(100000L + 300000 + 100000 + 50000, q.deudas15)
+        assertEquals(200000L, q.deudas30)
         assertEquals(200000L, q.presupuestos15)
     }
 

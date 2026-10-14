@@ -42,6 +42,9 @@ data class Obligacion(
     fun estado(hoy: LocalDate): String = Calculos.estado(presupuestado, pagado, fecha, hoy)
 }
 
+// rango de fechas que se paga con un sueldo
+data class Periodo(val desde: LocalDate, val hasta: LocalDate, val diaSueldo: Int?)
+
 data class IngresoEsperado(
     val clave: String,
     val programadoId: String,
@@ -201,10 +204,32 @@ object Obligaciones {
         return if (fecha.dayOfMonth <= 15) ym.atDay(1) to ym.atDay(15) else ym.atDay(16) to ym.atEndOfMonth()
     }
 
-    // pagos de la quincena sin contar los presupuestos de gasto
+    // dias del mes en que llega el sueldo (ej. 15 y 30), si hay dos
+    fun diasSueldo(datos: Datos): List<Int> = datos.ingresosProgramados
+        .filter { it.activo && it.frecuencia != FrecuenciaIngreso.UNICO && it.tipo == TipoIngreso.SALARIO }
+        .mapNotNull { it.dia }.distinct().sorted()
+
+    // lo que se paga con cada sueldo: con el del 15 hasta el 29 y con el del 30 hasta el 14
+    // sin dos sueldos fijos se usa la quincena del calendario
+    fun periodo(datos: Datos, fecha: LocalDate): Periodo {
+        val dias = diasSueldo(datos)
+        if (dias.size != 2) {
+            val (d, h) = quincena(fecha)
+            return Periodo(d, h, null)
+        }
+        val inicios = (-1L..1L).flatMap { m ->
+            val ym = YearMonth.from(fecha).plusMonths(m)
+            dias.map { Fechas.diaEnMes(ym, it) to it }
+        }.distinctBy { it.first }.sortedBy { it.first }
+        val actual = inicios.last { it.first <= fecha }
+        val siguiente = inicios.first { it.first > fecha }
+        return Periodo(actual.first, siguiente.first.minusDays(1), actual.second)
+    }
+
+    // pagos del periodo sin contar los presupuestos de gasto
     fun pagosQuincena(datos: Datos, fecha: LocalDate): List<Obligacion> {
-        val (desde, hasta) = quincena(fecha)
-        return generar(datos, desde, hasta).filter { it.tipoOrigen != Origen.PRESUPUESTO && it.presupuestado > 0 }
+        val p = periodo(datos, fecha)
+        return generar(datos, p.desde, p.hasta).filter { it.tipoOrigen != Origen.PRESUPUESTO && it.presupuestado > 0 }
     }
 
     // la quincena o periodo del presupuesto al que cae un gasto de esa fecha
