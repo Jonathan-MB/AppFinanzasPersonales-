@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -143,8 +144,8 @@ fun App(vm: AppViewModel) {
                             }
                             composable("gasto") { PantallaEtiquetasGasto(vm, d, { nav.popBackStack() }, { nav.navigate("monto") }) }
                             composable("ingreso") { PantallaEtiquetasIngreso(vm, d, { nav.popBackStack() }, { nav.navigate("monto") }) }
-                            composable("monto") {
-                                PantallaMonto(vm, d, { nav.popBackStack() }) { texto ->
+                            composable("monto") { e ->
+                                PantallaMonto(vm, d, { volver(nav, e) }) { texto ->
                                     nav.popBackStack("registrar", inclusive = false)
                                     if (nav.currentDestination?.route != "registrar") irPestana(nav, "registrar")
                                     mensaje(texto)
@@ -155,7 +156,7 @@ fun App(vm: AppViewModel) {
                             }
                             composable("deuda/{id}") { e ->
                                 val id = e.arguments?.getString("id") ?: ""
-                                PantallaDetalleDeuda(vm, d, id, { nav.popBackStack() }, { nav.navigate("editarDeuda/$id") }, { nav.navigate("monto") })
+                                PantallaDetalleDeuda(vm, d, id, { volver(nav, e) }, { nav.navigate("editarDeuda/$id") }, { nav.navigate("monto") })
                             }
                             composable("editarDeuda/{id}") { e -> PantallaEditarDeuda(vm, d, e.arguments?.getString("id") ?: "nuevo") { nav.popBackStack() } }
                             composable("plan") { PantallaPlan(vm, d) { nav.popBackStack() } }
@@ -171,7 +172,7 @@ fun App(vm: AppViewModel) {
                                 }
                             }
                             composable("registro/{id}") { e ->
-                                PantallaEditarRegistro(vm, d, e.arguments?.getString("id") ?: "", { nav.popBackStack() }, ::borrarConDeshacer)
+                                PantallaEditarRegistro(vm, d, e.arguments?.getString("id") ?: "", { volver(nav, e) }, ::borrarConDeshacer)
                             }
                             composable("lista/{tipo}") { e ->
                                 val tipo = e.arguments?.getString("tipo") ?: TipoLista.GASTO
@@ -220,6 +221,11 @@ fun App(vm: AppViewModel) {
             }
         }
     }
+}
+
+// solo vuelve si esa pantalla sigue al frente; asi un segundo aviso de volver no saca la de atras
+private fun volver(nav: NavHostController, entrada: NavBackStackEntry) {
+    if (nav.currentBackStackEntry?.id == entrada.id) nav.popBackStack()
 }
 
 private fun irPestana(nav: NavHostController, ruta: String) {

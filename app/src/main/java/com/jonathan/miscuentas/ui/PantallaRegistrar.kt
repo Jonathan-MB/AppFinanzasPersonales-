@@ -319,7 +319,8 @@ fun PantallaEtiquetasIngreso(vm: AppViewModel, datos: Datos, alVolver: () -> Uni
 // solo el monto y guardar
 @Composable
 fun PantallaMonto(vm: AppViewModel, datos: Datos, alVolver: () -> Unit, alGuardar: (String) -> Unit) {
-    val sel = vm.seleccion ?: run { LaunchedEffect(Unit) { alVolver() }; return }
+    // se guarda al entrar; al limpiar la seleccion despues de guardar esta pantalla no debe volver otra vez
+    val sel = remember { vm.seleccion } ?: run { LaunchedEffect(Unit) { alVolver() }; return }
     val esIngreso = sel is Seleccion.IngresoEtiqueta || sel is Seleccion.IngresoEsperadoSel
     val (emoji, titulo, sugerido) = when (sel) {
         is Seleccion.Etiqueta -> Triple(sel.etiqueta.emoji, sel.etiqueta.nombre, null)
