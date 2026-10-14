@@ -49,6 +49,7 @@ Lo que se decidió sin estar definido en el documento original.
 - Respaldo automático semanal en la carpeta interna de la app (se guardan los 10 más recientes), además de antes de importar y antes de borrar todo.
 
 ## Datos personales
+- Al cambiar el archivo de datos propios, la app instalada no lo vuelve a leer sola. En Exportar / importar hay un botón que toma de ahí solo deudas, gastos fijos, presupuestos, ingresos programados y eventos, y conserva lo registrado, la configuración y las etiquetas.
 - Los datos propios no están en el código. Van en `app/src/main/assets/datos_personales.txt`, que está en `.gitignore`. Sin ese archivo la app arranca vacía con las etiquetas por defecto.
 - Las pruebas usan datos inventados.
 

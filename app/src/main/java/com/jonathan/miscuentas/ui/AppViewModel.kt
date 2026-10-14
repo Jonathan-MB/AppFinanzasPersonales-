@@ -130,6 +130,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         repo.importar(texto)
     }
 
+    suspend fun actualizarDesdeArchivo(): ResultadoImport? = repo.actualizarDesdeArchivo()
+
     fun borrarTodo() = viewModelScope.launch {
         datos.value?.let { repo.guardarRespaldo(it, "antes_de_borrar") }
         repo.borrarTodo()

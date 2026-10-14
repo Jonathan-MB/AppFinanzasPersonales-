@@ -28,7 +28,7 @@ import java.time.YearMonth
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun PantallaRegistrar(vm: AppViewModel, datos: Datos, irGasto: () -> Unit, irIngreso: () -> Unit, irMonto: () -> Unit, irDeudas: () -> Unit) {
+fun PantallaRegistrar(vm: AppViewModel, datos: Datos, irGasto: () -> Unit, irIngreso: () -> Unit, irMonto: () -> Unit, irDeudas: () -> Unit, irDetalle: (Obligacion) -> Unit) {
     val hoy = vm.hoy()
     val mes = YearMonth.from(hoy)
     val deberia = Calculos.deberiaTener(datos)
@@ -116,15 +116,9 @@ fun PantallaRegistrar(vm: AppViewModel, datos: Datos, irGasto: () -> Unit, irIng
             modifier = Modifier.fillMaxWidth().height(52.dp),
         ) { Text("🏍  + Moto", fontSize = 17.sp) }
 
-        // proximos pagos
-        val proximos = Obligaciones.generar(datos, hoy.minusDays(31), hoy.plusDays(10))
-            .filter { it.falta > 0 && it.tipoOrigen != Origen.PRESUPUESTO }.take(4)
-        if (proximos.isNotEmpty()) {
-            TituloSeccion("Pagos pendientes")
-            proximos.forEach { o ->
-                FilaPago(o, hoy) { vm.seleccion = Seleccion.Pago(o); irMonto() }
-            }
-        }
+        // todo lo de la quincena, no solo los primeros
+        SeccionQuincena(vm, datos, irMonto, irDetalle)
+        Spacer(Modifier.height(80.dp))
     }
 }
 

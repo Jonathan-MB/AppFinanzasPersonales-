@@ -95,4 +95,27 @@ class AuditoriaTest {
         val todas = Obligaciones.generar(datos, LocalDate.of(2026, 10, 13), LocalDate.of(2030, 12, 31)).filter { it.origenId == "d-b" }
         assertEquals(30, todas.size)
     }
+
+    @Test
+    fun actualizarBaseConservaLoRegistrado() {
+        val actuales = datos.copy(
+            config = datos.config.copy(plataInicial = 500000),
+            movimientos = listOf(pago("m1", "deuda:d-a:2026-10-15", 100000)),
+            ingresos = listOf(Ingreso("i1", "2026-10-15", 1500000, TipoIngreso.SALARIO)),
+        )
+        // el archivo trae la tarjeta A con otra cuota y el arriendo en otro dia
+        val archivo = datos.copy(
+            deudas = datos.deudas.map { if (it.id == "d-a") it.copy(cuotaMensual = 250000, tasaEa = 0.2859) else it },
+            gastosFijos = datos.gastosFijos.map { if (it.id == "g-arriendo") it.copy(diaPago = 15) else it },
+        )
+        val txt = Txt.exportar(archivo, LocalDate.of(2026, 10, 14), LocalDateTime.of(2026, 10, 14, 8, 0))
+        val res = Txt.actualizarBase(txt, actuales).datos
+        assertEquals(250000L, res.deudas.first { it.id == "d-a" }.cuotaMensual)
+        assertEquals(0.2859, res.deudas.first { it.id == "d-a" }.tasaEa!!, 0.00001)
+        assertEquals(15, res.gastosFijos.first { it.id == "g-arriendo" }.diaPago)
+        assertEquals(actuales.movimientos, res.movimientos)
+        assertEquals(actuales.ingresos, res.ingresos)
+        assertEquals(500000L, res.config.plataInicial)
+        assertEquals(actuales.categorias, res.categorias)
+    }
 }

@@ -137,6 +137,17 @@ object Txt {
         return sb.toString()
     }
 
+    // toma del archivo solo lo que se planea (deudas, gastos, presupuestos, ingresos y eventos)
+    // y deja lo registrado, la configuracion y las etiquetas como estan
+    fun actualizarBase(texto: String, actuales: Datos, ahora: String = Fechas.ahora()): ResultadoImport {
+        val res = importar(texto, actuales, ahora)
+        val d = res.datos
+        return res.copy(datos = actuales.copy(
+            deudas = d.deudas, gastosFijos = d.gastosFijos, presupuestos = d.presupuestos,
+            ingresosProgramados = d.ingresosProgramados, eventos = d.eventos,
+        ))
+    }
+
     // lee el txt; las secciones que no vienen se dejan como estan
     fun importar(texto: String, actuales: Datos, ahora: String = Fechas.ahora()): ResultadoImport {
         val secciones = mutableMapOf<String, MutableList<Pair<Int, List<String>>>>()

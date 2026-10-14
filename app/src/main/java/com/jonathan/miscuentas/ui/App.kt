@@ -129,7 +129,7 @@ fun App(vm: AppViewModel) {
                     } else {
                         NavHost(nav, startDestination = "registrar", modifier = Modifier.padding(padding)) {
                             composable("registrar") {
-                                PantallaRegistrar(vm, d, { nav.navigate("gasto") }, { nav.navigate("ingreso") }, { nav.navigate("monto") }, { nav.navigate("deudas") })
+                                PantallaRegistrar(vm, d, { nav.navigate("gasto") }, { nav.navigate("ingreso") }, { nav.navigate("monto") }, { nav.navigate("deudas") }) { o -> nav.navigate("obligacion/" + Uri.encode(o.clave)) }
                             }
                             composable("inicio") {
                                 PantallaInicio(vm, d, { nav.navigate("monto") }, { nav.navigate("deudas") }, { irPestana(nav, "calendario") }) { o -> nav.navigate("obligacion/" + Uri.encode(o.clave)) }
@@ -192,6 +192,22 @@ fun App(vm: AppViewModel) {
                                     importar = {
                                         confirmador.preguntar("Importar", "Esto reemplaza todo lo actual. Antes se guarda un respaldo automático.", "Elegir archivo") {
                                             importador.launch(arrayOf("text/*", "application/octet-stream"))
+                                        }
+                                    },
+                                    actualizar = {
+                                        confirmador.preguntar(
+                                            "Actualizar deudas y gastos",
+                                            "Se cambian las deudas, gastos fijos, presupuestos, ingresos programados y eventos por los de esta versión. Lo que registraste se conserva y antes se guarda un respaldo.",
+                                            "Actualizar",
+                                        ) {
+                                            scope.launch {
+                                                val res = vm.actualizarDesdeArchivo()
+                                                resultadoImport = when {
+                                                    res == null -> "Esta versión no trae datos propios para actualizar."
+                                                    res.errores.isEmpty() -> "Listo: deudas, gastos fijos, presupuestos, ingresos y eventos actualizados. Tus registros se conservaron."
+                                                    else -> "Actualizado con ${res.errores.size} líneas con error:\n" + res.errores.take(20).joinToString("\n")
+                                                }
+                                            }
                                         }
                                     },
                                     resultado = resultadoImport, respaldos = respaldos, alVolver = { nav.popBackStack() },

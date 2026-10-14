@@ -117,6 +117,18 @@ class Repositorio(private val context: Context) {
         }
     }
 
+    // vuelve a leer deudas y gastos del archivo propio sin tocar lo registrado
+    suspend fun actualizarDesdeArchivo(): ResultadoImport? {
+        val texto = withContext(Dispatchers.IO) {
+            runCatching { context.assets.open(Semilla.ARCHIVO_PERSONAL).use { it.readBytes().toString(Charsets.UTF_8) } }.getOrNull()
+        } ?: return null
+        val actuales = actuales() ?: return null
+        guardarRespaldo(actuales, "antes_de_actualizar")
+        val res = Txt.actualizarBase(texto, actuales)
+        if (res.seccionesLeidas.isNotEmpty()) dao.reemplazarTodo(res.datos)
+        return res
+    }
+
     // antes de importar guarda lo que habia
     suspend fun importar(texto: String): ResultadoImport {
         val actuales = actuales() ?: Semilla.datos()

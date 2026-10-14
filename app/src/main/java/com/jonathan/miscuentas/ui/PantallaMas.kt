@@ -384,7 +384,7 @@ fun PantallaConfig(vm: AppViewModel, datos: Datos, alVolver: () -> Unit, pedirPe
 }
 
 @Composable
-fun PantallaDatos(exportar: () -> Unit, importar: () -> Unit, resultado: String?, respaldos: List<String>, alVolver: () -> Unit) {
+fun PantallaDatos(exportar: () -> Unit, importar: () -> Unit, actualizar: () -> Unit, resultado: String?, respaldos: List<String>, alVolver: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
         Encabezado("Exportar / importar", alVolver)
         Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
@@ -400,6 +400,13 @@ fun PantallaDatos(exportar: () -> Unit, importar: () -> Unit, resultado: String?
                 Text("Reemplaza todo lo actual con el contenido del archivo. Antes se guarda un respaldo automático.", fontSize = 13.sp)
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(onClick = importar, Modifier.fillMaxWidth()) { Text("📥 Importar TXT") }
+            }
+            Spacer(Modifier.height(12.dp))
+            Tarjeta {
+                Text("Actualizar deudas y gastos fijos", fontWeight = FontWeight.Bold)
+                Text("Toma las deudas, gastos fijos, presupuestos, ingresos programados y eventos de la versión instalada. Tus gastos, ingresos y pagos registrados se conservan.", fontSize = 13.sp)
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(onClick = actualizar, Modifier.fillMaxWidth()) { Text("🔄 Actualizar desde la app") }
             }
             resultado?.let {
                 Spacer(Modifier.height(12.dp))
