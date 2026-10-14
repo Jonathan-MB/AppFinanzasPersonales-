@@ -116,9 +116,11 @@ fun ChipEstado(estado: String) {
 }
 
 @Composable
-fun BarraProgreso(usado: Long, total: Long, modifier: Modifier = Modifier) {
+fun BarraProgreso(usado: Long, total: Long, modifier: Modifier = Modifier, avance: Boolean = false) {
     val pct = if (total > 0) usado.toFloat() / total else 0f
+    // en avance de pagos llenar la barra es bueno, no alerta
     val color = when {
+        avance -> if (pct >= 1f) Colores.verde else MaterialTheme.colorScheme.primary
         pct > 1f -> Colores.rojo
         pct >= 0.8f -> Colores.amarillo
         else -> MaterialTheme.colorScheme.primary

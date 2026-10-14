@@ -137,13 +137,13 @@ fun SeccionQuincena(vm: AppViewModel, datos: Datos, irMonto: () -> Unit, irDetal
         FilaDato("Pagado", Formato.pesos(pagos.sumOf { it.pagado }), Colores.verde)
         FilaDato("Falta", Formato.pesos(pendientes.sumOf { it.falta }), if (pendientes.isEmpty()) Colores.verde else Colores.rojo, negrita = true)
         Spacer(Modifier.height(6.dp))
-        BarraProgreso(pagos.sumOf { minOf(it.pagado, it.presupuestado) }, pagos.sumOf { it.presupuestado })
+        BarraProgreso(pagos.sumOf { minOf(it.pagado, it.presupuestado) }, pagos.sumOf { it.presupuestado }, avance = true)
         if (pendientes.isNotEmpty()) {
             Spacer(Modifier.height(8.dp))
             androidx.compose.material3.OutlinedButton(onClick = {
                 confirmar.preguntar(
                     "Pagar todo",
-                    "Se registran ${pendientes.size} pagos por ${Formato.pesos(pendientes.sumOf { it.falta })} con la fecha de hoy. Si algún recibo llegó por otro valor, mejor págalo uno por uno.",
+                    "Se ${if (pendientes.size == 1) "registra 1 pago" else "registran ${pendientes.size} pagos"} por ${Formato.pesos(pendientes.sumOf { it.falta })} con la fecha de hoy. Si algún recibo llegó por otro valor, mejor págalo uno por uno.",
                     "Pagar todo",
                 ) { vm.pagarTodo(pendientes, hoy) }
             }, modifier = Modifier.fillMaxWidth()) { Text("Pagar todo lo pendiente") }
