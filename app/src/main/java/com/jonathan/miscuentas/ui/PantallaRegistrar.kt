@@ -339,6 +339,8 @@ fun PantallaMonto(vm: AppViewModel, datos: Datos, alVolver: () -> Unit, alGuarda
     // recibos y tarjetas: se paga completo aunque el valor cambie, o como abono
     val esRecibo = sel is Seleccion.Pago && sel.obligacion.tipoOrigen != Origen.PRESUPUESTO
     var completo by remember { mutableStateOf(true) }
+    // evita guardar dos veces con doble toque
+    var guardado by remember { mutableStateOf(false) }
     val foco = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { foco.requestFocus() } }
 
@@ -377,10 +379,12 @@ fun PantallaMonto(vm: AppViewModel, datos: Datos, alVolver: () -> Unit, alGuarda
             CampoTexto("Nota (opcional)", nota, { nota = it })
             Spacer(Modifier.height(16.dp))
             Button(
-                enabled = (monto ?: 0) > 0 && fecha != null,
+                enabled = (monto ?: 0) > 0 && fecha != null && !guardado,
                 onClick = {
+                    if (guardado) return@Button
                     val m = monto ?: return@Button
                     val f = fecha ?: return@Button
+                    guardado = true
                     if (esIngreso) vm.registrarIngreso(sel, m, f, nota) else vm.registrarGasto(sel, m, f, nota, esRecibo && completo)
                     vm.seleccion = null
                     alGuardar((if (esIngreso) "Ingreso" else "Gasto") + " guardado: ${Formato.pesos(m)} · $titulo")

@@ -37,7 +37,9 @@ fun registros(datos: Datos): List<Registro> {
         val emoji = etiquetas.values.firstOrNull { it.tipo == TipoEtiqueta.INGRESO && Semilla.tipoIngreso(it.nombre) == i.tipo }?.emoji ?: "💰"
         Registro(i.id, i.fecha, i.monto, true, "$emoji ${i.nota.ifBlank { i.tipo }}", i.tipo, "ingreso", Categorias.INGRESO, i)
     }
-    return (gastos + ingresos).sortedWith(compareByDescending<Registro> { it.fecha }.thenByDescending { it.id })
+    // el mismo dia queda arriba lo ultimo que se registro
+    fun creado(r: Registro) = (r.original as? Movimiento)?.createdAt ?: (r.original as? Ingreso)?.createdAt ?: ""
+    return (gastos + ingresos).sortedWith(compareByDescending<Registro> { it.fecha }.thenByDescending { creado(it) }.thenByDescending { it.id })
 }
 
 private fun obligacionNombre(datos: Datos, clave: String): String? {
@@ -135,6 +137,8 @@ fun PantallaEditarRegistro(vm: AppViewModel, datos: Datos, id: String, alVolver:
     var nota by remember { mutableStateOf(mov?.nota ?: ing?.nota ?: "") }
     var categoria by remember { mutableStateOf(mov?.categoria ?: "") }
     var tipoIngreso by remember { mutableStateOf(ing?.tipo ?: TipoIngreso.OTRO) }
+    var completo by remember { mutableStateOf(mov?.liquida ?: false) }
+    val esRecibo = mov?.claveObligacion != null && !mov.claveObligacion.startsWith(Origen.PRESUPUESTO + ":")
 
     Column(Modifier.fillMaxSize()) {
         Encabezado(if (mov != null) "Editar gasto" else "Editar ingreso", alVolver)
@@ -143,9 +147,15 @@ fun PantallaEditarRegistro(vm: AppViewModel, datos: Datos, id: String, alVolver:
             CampoFecha("Fecha", fecha, { fecha = it })
             CampoTexto("Nota", nota, { nota = it })
             if (mov != null) {
-                if (mov.claveObligacion != null) Text("Ligado a: ${mov.claveObligacion}", fontSize = 12.sp)
+                mov.claveObligacion?.let { c ->
+                    val fechaPago = Fechas.leer(c.substringAfterLast(':'))?.let { " del " + Formato.fecha(Fechas.iso(it)) } ?: ""
+                    Text("Pago de ${obligacionNombre(datos, c) ?: "un pago borrado"}$fechaPago", fontSize = 12.sp)
+                }
+                if (esRecibo) {
+                    SelectorChips(listOf("si" to "✓ Pago completo", "no" to "Es un abono"), if (completo) "si" else "no") { completo = it == "si" }
+                }
                 Text("Categoría", fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
-                val cats = (datos.categorias.filter { it.tipo == TipoEtiqueta.GASTO || it.tipo == TipoEtiqueta.SISTEMA }.map { it.nombre } + mov.categoria)
+                val cats = (datos.categorias.filter { it.tipo == TipoEtiqueta.GASTO || it.tipo == TipoEtiqueta.SISTEMA }.map { it.nombre }.filter { it != Categorias.INGRESO } + mov.categoria)
                     .filter { it.isNotBlank() }.distinct()
                 SelectorChips(cats.map { it to it }, categoria) { categoria = it }
             } else {
@@ -157,7 +167,7 @@ fun PantallaEditarRegistro(vm: AppViewModel, datos: Datos, id: String, alVolver:
                 enabled = (monto ?: 0) > 0 && fecha != null,
                 onClick = {
                     val f = Fechas.iso(fecha!!)
-                    if (mov != null) vm.guardar(mov.copy(monto = monto!!, fecha = f, nota = nota, categoria = categoria))
+                    if (mov != null) vm.guardar(mov.copy(monto = monto!!, fecha = f, nota = nota, categoria = categoria, liquida = esRecibo && completo))
                     else if (ing != null) vm.guardar(ing.copy(monto = monto!!, fecha = f, nota = nota, tipo = tipoIngreso))
                     alVolver()
                 },

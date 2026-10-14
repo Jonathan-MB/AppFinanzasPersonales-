@@ -58,3 +58,10 @@ Lo que se decidió sin estar definido en el documento original.
 - Los presupuestos no tienen esta opción porque son topes, no deudas.
 - La quincena va del 1 al 15 y del 16 al fin de mes. En Inicio salen todos sus pagos en orden, los de antes sin pagar aparte, y "Pagar todo" registra lo que falta de cada uno con la fecha de hoy.
 - Base de datos versión 2: la migración agrega la columna `liquida` a movimientos sin borrar nada.
+- Un pago ya guardado se puede cambiar entre pago completo y abono desde Historial.
+
+## Revisión de calidad
+- Los pagos se calculan siempre sobre el mes completo y luego se recorta al rango pedido. Antes, al pedir un rango corto (la quincena o el aviso diario), el pago de otra semana o quincena del mismo mes se contaba en la que sí estaba en el rango.
+- Un día de la semana fuera de 0 a 6 (por ejemplo en un TXT editado a mano) se ajusta en vez de colgar la app.
+- El botón Guardar del monto se bloquea después del primer toque para no registrar dos veces.
+- La hora del aviso acepta `7:00` o `07:00`. Semanas por mes tiene que ser mayor que 0.

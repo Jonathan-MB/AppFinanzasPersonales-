@@ -361,11 +361,12 @@ fun PantallaConfig(vm: AppViewModel, datos: Datos, alVolver: () -> Unit, pedirPe
             TextButton(onClick = pedirPermiso) { Text("Permitir notificaciones") }
             Spacer(Modifier.height(10.dp))
             Button(modifier = Modifier.fillMaxWidth().height(52.dp), onClick = {
-                val horaOk = runCatching { java.time.LocalTime.parse(hora) }.isSuccess
+                // acepta 7:00 o 07:00 y lo guarda como 07:00
+                val horaOk = runCatching { java.time.LocalTime.parse(hora.trim(), java.time.format.DateTimeFormatter.ofPattern("H:mm")) }.getOrNull()
                 vm.guardar(c.copy(
                     plataInicial = plata ?: 0, fechaInicio = inicio?.let { Fechas.iso(it) } ?: c.fechaInicio,
-                    diasAviso = dias.toIntOrNull() ?: c.diasAviso, horaAviso = if (horaOk) hora else c.horaAviso,
-                    semanasPorMes = semanas.replace(',', '.').toDoubleOrNull() ?: c.semanasPorMes, recordatorioDiario = noche,
+                    diasAviso = dias.toIntOrNull() ?: c.diasAviso, horaAviso = horaOk?.toString() ?: c.horaAviso,
+                    semanasPorMes = semanas.replace(',', '.').toDoubleOrNull()?.takeIf { it > 0 } ?: c.semanasPorMes, recordatorioDiario = noche,
                 ))
                 alVolver()
             }) { Text("Guardar") }
@@ -440,8 +441,17 @@ fun PantallaFechasPago(vm: AppViewModel, datos: Datos, alVolver: () -> Unit) {
                     Frecuencia.MENSUAL -> FilaDia(g.nombre, Formato.pesos(g.valor), g.diaPago, g.diaConfirmado) { dia ->
                         vm.guardar(g.copy(diaPago = dia, diaConfirmado = true))
                     }
-                    Frecuencia.SEMANAL -> FilaDato(g.nombre, "cada ${Formato.nombreDiaSemana(g.diaSemana ?: 6)}")
-                    else -> FilaDato(g.nombre, "días 15 y 30")
+                    else -> {
+                        val cuando = if (g.frecuencia == Frecuencia.SEMANAL) "cada ${Formato.nombreDiaSemana(g.diaSemana ?: 6)}" else "días 15 y 30"
+                        if (g.diaConfirmado) FilaDato(g.nombre, cuando)
+                        else Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(g.nombre, fontWeight = FontWeight.Bold)
+                                Text("$cuando · ⚠ confirma este día", fontSize = 12.sp, color = Colores.amarillo)
+                            }
+                            TextButton(onClick = { vm.guardar(g.copy(diaConfirmado = true)) }) { Text("Confirmar") }
+                        }
+                    }
                 }
             }
 

@@ -62,20 +62,23 @@ object Obligaciones {
         val inicio = Fechas.leer(datos.config.fechaInicio) ?: desde
         val d = maxOf(desde, inicio)
         if (hasta < d) return emptyList()
+        // se arma el mes completo para que los pagos caigan en su semana o quincena y no en la del rango
+        val md = maxOf(YearMonth.from(d).atDay(1), inicio)
+        val mh = YearMonth.from(hasta).atEndOfMonth()
         val base = mutableListOf<Obligacion>()
-        datos.deudas.filter { it.activa }.forEach { base += deThisDeuda(it, d, hasta, inicio) }
-        datos.gastosFijos.filter { it.activo }.forEach { base += deGasto(it, d, hasta, datos.config) }
-        datos.presupuestos.filter { it.activo }.forEach { base += dePresupuesto(it, d, hasta) }
+        datos.deudas.filter { it.activa }.forEach { base += deThisDeuda(it, md, mh, inicio) }
+        datos.gastosFijos.filter { it.activo }.forEach { base += deGasto(it, md, mh, datos.config) }
+        datos.presupuestos.filter { it.activo }.forEach { base += dePresupuesto(it, md, mh) }
         datos.eventos.forEach { ev ->
             val f = Fechas.leer(ev.fecha) ?: return@forEach
-            if (f in d..hasta) {
+            if (f in md..mh) {
                 base += Obligacion(
                     clave(Origen.EVENTO, ev.id, f), Origen.EVENTO, ev.id, f, ev.nombre,
                     ev.categoria.ifBlank { Categorias.NO_PLANEADO }, ev.monto, deudaId = ev.deudaId
                 )
             }
         }
-        return conPagos(base, datos.movimientos).sortedWith(compareBy({ it.fecha }, { it.concepto }))
+        return conPagos(base, datos.movimientos).filter { it.fecha in d..hasta }.sortedWith(compareBy({ it.fecha }, { it.concepto }))
     }
 
     private fun meses(desde: LocalDate, hasta: LocalDate): Sequence<YearMonth> =
@@ -125,7 +128,7 @@ object Obligaciones {
         }
         when (g.frecuencia) {
             Frecuencia.SEMANAL -> {
-                val dia = g.diaSemana ?: 6
+                val dia = (g.diaSemana ?: 6).mod(7)
                 var f = desde
                 while (Fechas.indiceDiaSemana(f) != dia) f = f.plusDays(1)
                 while (f <= hasta) {
