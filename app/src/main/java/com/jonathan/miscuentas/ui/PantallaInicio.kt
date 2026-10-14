@@ -65,12 +65,7 @@ fun PantallaInicio(vm: AppViewModel, datos: Datos, irMonto: () -> Unit, irDeudas
             }
         }
 
-        // lo que viene despues de esta quincena
-        val finQuincena = Obligaciones.quincena(hoy).second
-        val pendientes = todas.filter { it.fecha > finQuincena && it.falta > 0 && it.tipoOrigen != Origen.PRESUPUESTO }.take(10)
-        TituloSeccion("Después de esta quincena")
-        if (pendientes.isEmpty()) Vacio("No hay pagos programados después de esta quincena.")
-        pendientes.forEach { o -> FilaPago(o, hoy) { vm.seleccion = Seleccion.Pago(o); irMonto() } }
+        SeccionProximaQuincena(vm, datos, irMonto)
 
         // graficas
         TituloSeccion("Presupuestado vs pagado")
@@ -118,6 +113,19 @@ fun Cifra(titulo: String, valor: String, color: Color, modifier: Modifier = Modi
         Text(titulo, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(valor, fontWeight = FontWeight.Bold, color = color, fontSize = 16.sp)
     }
+}
+
+// la quincena que sigue completa, para ver lo que viene
+@Composable
+fun SeccionProximaQuincena(vm: AppViewModel, datos: Datos, irMonto: () -> Unit) {
+    val hoy = vm.hoy()
+    val siguiente = Obligaciones.quincena(hoy).second.plusDays(1)
+    val (desde, hasta) = Obligaciones.quincena(siguiente)
+    val pagos = Obligaciones.pagosQuincena(datos, siguiente).filter { it.falta > 0 }
+    TituloSeccion("Próxima quincena (${desde.dayOfMonth} al ${Formato.fechaCorta(hasta)})")
+    if (pagos.isEmpty()) Vacio("No hay pagos en la próxima quincena.")
+    else FilaDato("Total", Formato.pesos(pagos.sumOf { it.falta }), negrita = true)
+    pagos.forEach { o -> FilaPago(o, hoy) { vm.seleccion = Seleccion.Pago(o); irMonto() } }
 }
 
 // todos los pagos de la quincena en orden, porque se pagan casi todos juntos

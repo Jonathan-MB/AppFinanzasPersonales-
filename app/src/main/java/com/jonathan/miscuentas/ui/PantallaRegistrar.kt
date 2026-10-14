@@ -118,6 +118,7 @@ fun PantallaRegistrar(vm: AppViewModel, datos: Datos, irGasto: () -> Unit, irIng
 
         // todo lo de la quincena, no solo los primeros
         SeccionQuincena(vm, datos, irMonto, irDetalle)
+        SeccionProximaQuincena(vm, datos, irMonto)
         Spacer(Modifier.height(80.dp))
     }
 }
