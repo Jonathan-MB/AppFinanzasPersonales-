@@ -53,7 +53,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun borrar(v: Any) = viewModelScope.launch { repo.borrar(v) }
 
     // arma el movimiento segun lo que se toco
-    fun registrarGasto(sel: Seleccion, monto: Long, fecha: LocalDate, nota: String) = viewModelScope.launch {
+    fun registrarGasto(sel: Seleccion, monto: Long, fecha: LocalDate, nota: String, completo: Boolean = false) = viewModelScope.launch {
         val d = datos.value ?: return@launch
         val iso = Fechas.iso(fecha)
         var claveRevisar: Obligacion? = null
@@ -61,7 +61,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             is Seleccion.Pago -> {
                 val o = sel.obligacion
                 if (o.tipoOrigen == Origen.PRESUPUESTO) claveRevisar = o
-                Movimiento(nuevoId(), iso, monto, nota, o.clave, TipoMovimiento.PAGO_PROGRAMADO, o.categoria, o.deudaId)
+                Movimiento(nuevoId(), iso, monto, nota, o.clave, TipoMovimiento.PAGO_PROGRAMADO, o.categoria, o.deudaId,
+                    liquida = completo && o.tipoOrigen != Origen.PRESUPUESTO)
             }
             is Seleccion.AbonoDeuda ->
                 Movimiento(nuevoId(), iso, monto, nota, null, TipoMovimiento.ABONO_EXTRA, Categorias.ABONO_EXTRA, sel.deuda.id)
@@ -92,6 +93,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             else -> return@launch
         }
         repo.guardar(ingreso)
+    }
+
+    // paga de una vez todo lo pendiente por lo que falta
+    fun pagarTodo(lista: List<Obligacion>, fecha: LocalDate) = viewModelScope.launch {
+        lista.filter { it.falta > 0 }.forEach { o ->
+            repo.guardar(Movimiento(nuevoId(), Fechas.iso(fecha), o.falta, "", o.clave, TipoMovimiento.PAGO_PROGRAMADO, o.categoria, o.deudaId, liquida = true))
+        }
     }
 
     fun moto(monto: Long, fecha: LocalDate) = viewModelScope.launch {

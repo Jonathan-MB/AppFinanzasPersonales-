@@ -129,6 +129,8 @@ data class Movimiento(
     val deudaId: String? = null,
     val createdAt: String = "",
     val updatedAt: String = "",
+    // pago completo aunque el valor sea distinto al presupuestado
+    val liquida: Boolean = false,
 )
 
 @Entity(tableName = "ingresos")

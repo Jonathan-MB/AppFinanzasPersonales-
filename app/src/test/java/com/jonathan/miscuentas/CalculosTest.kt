@@ -52,6 +52,33 @@ class CalculosTest {
     }
 
     @Test
+    fun pagoCompletoConOtroValorQuedaPagado() {
+        // recibo presupuestado en 600.000 que llego por 580.000
+        val clave = Obligaciones.clave(Origen.GASTO, "g-arriendo", LocalDate.of(2026, 11, 1))
+        val completo = datos.copy(movimientos = listOf(Movimiento("m1", "2026-11-01", 580000, claveObligacion = clave, tipo = TipoMovimiento.PAGO_PROGRAMADO, liquida = true)))
+        val o = Obligaciones.generar(completo, LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30)).first { it.clave == clave }
+        assertEquals(Estado.PAGADO, o.estado(hoy))
+        assertEquals(0L, o.falta)
+        assertEquals(580000L, o.presupuestado)
+        assertEquals(600000L, o.estimado)
+
+        // el mismo valor como abono queda debiendo
+        val abono = datos.copy(movimientos = listOf(Movimiento("m1", "2026-11-01", 580000, claveObligacion = clave, tipo = TipoMovimiento.PAGO_PROGRAMADO)))
+        val p = Obligaciones.generar(abono, LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30)).first { it.clave == clave }
+        assertEquals(20000L, p.falta)
+    }
+
+    @Test
+    fun pagosDeLaQuincena() {
+        val (desde, hasta) = Obligaciones.quincena(LocalDate.of(2026, 11, 20))
+        assertEquals(LocalDate.of(2026, 11, 16), desde)
+        assertEquals(LocalDate.of(2026, 11, 30), hasta)
+        val pagos = Obligaciones.pagosQuincena(datos, LocalDate.of(2026, 11, 3))
+        assertTrue(pagos.all { it.fecha.dayOfMonth <= 15 && it.tipoOrigen != Origen.PRESUPUESTO })
+        assertTrue(pagos.any { it.concepto == "Arriendo" })
+    }
+
+    @Test
     fun calendarioFuturoYFechasInexistentes() {
         val marzo = Obligaciones.generar(datos, LocalDate.of(2027, 3, 1), LocalDate.of(2027, 3, 31))
         assertTrue(marzo.any { it.concepto == "Arriendo" })

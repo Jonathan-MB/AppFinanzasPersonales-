@@ -8,12 +8,15 @@ Al abrir la app lo primero es elegir **Gasto** o **Ingreso**, tocar una etiqueta
 
 - **Registrar:** gasto o ingreso en dos toques con etiquetas. Se pueden crear etiquetas nuevas y conectarlas a un presupuesto.
 - **Control de la plata:** "Deberías tener hoy" = plata inicial + lo que entró − lo que salió, con ajuste contra el saldo real.
+- **Pagos variables:** al pagar un recibo (luz, agua, gas, tarjeta) se puede cambiar el valor. Con **Pago completo** queda pagado aunque sea otro monto; con **Es un abono** queda debiendo lo que falta.
+- **Quincena:** en Inicio salen en orden todos los pagos de la quincena con total, pagado y falta, más un botón para pagar todo de una.
+- **Fechas de pago:** en Más se ve y se corrige el día de pago de deudas, gastos fijos e ingresos.
 - **Inicio:** vencidos, próximos 7 días, no planeado y moto del mes, endeudamiento con semáforo, avance del mes, presupuestos y gráficas.
 - **Calendario:** pagos de cualquier mes (deudas, gastos fijos, presupuestos y eventos) en lista o en cuadrícula, con estados y filtros.
 - **Movimientos:** buscador, filtros, totales, edición y borrado con deshacer.
 - **Deudas:** saldo estimado, intereses, meses para pagar, simulador y plan de ataque (bola de nieve o avalancha).
 - **Más:** gastos fijos, presupuestos, ingresos programados, eventos, etiquetas, reparto por quincena, configuración, exportar e importar TXT.
-- **Avisos:** notificación de pagos unos días antes y el mismo día, recordatorio nocturno opcional y alertas de presupuesto al 80 % y al 100 %.
+- **Avisos:** notificación de pagos unos días antes y el mismo día, aviso diario de pagos vencidos sin pagar, recordatorio nocturno opcional y alertas de presupuesto al 80 % y al 100 %.
 - **Respaldos:** automático cada semana dentro de la app y antes de importar o borrar todo.
 
 ## Requisitos

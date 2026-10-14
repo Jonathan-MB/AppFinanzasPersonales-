@@ -131,13 +131,15 @@ fun App(vm: AppViewModel) {
                             composable("registrar") {
                                 PantallaRegistrar(vm, d, { nav.navigate("gasto") }, { nav.navigate("ingreso") }, { nav.navigate("monto") }, { nav.navigate("deudas") })
                             }
-                            composable("inicio") { PantallaInicio(vm, d, { nav.navigate("monto") }, { nav.navigate("deudas") }, { irPestana(nav, "calendario") }) }
+                            composable("inicio") {
+                                PantallaInicio(vm, d, { nav.navigate("monto") }, { nav.navigate("deudas") }, { irPestana(nav, "calendario") }) { o -> nav.navigate("obligacion/" + Uri.encode(o.clave)) }
+                            }
                             composable("calendario") { PantallaCalendario(vm, d) { o -> nav.navigate("obligacion/" + Uri.encode(o.clave)) } }
                             composable("movimientos") {
                                 PantallaMovimientos(vm, d, { r -> nav.navigate("registro/${r.id}") }, ::borrarConDeshacer)
                             }
                             composable("mas") {
-                                PantallaMas({ nav.navigate("deudas") }, { nav.navigate("lista/$it") }, { nav.navigate("reparto") }, { nav.navigate("config") }, { nav.navigate("datos") })
+                                PantallaMas({ nav.navigate("deudas") }, { nav.navigate("lista/$it") }, { nav.navigate("reparto") }, { nav.navigate("config") }, { nav.navigate("datos") }, { nav.navigate("fechas") })
                             }
                             composable("gasto") { PantallaEtiquetasGasto(vm, d, { nav.popBackStack() }, { nav.navigate("monto") }) }
                             composable("ingreso") { PantallaEtiquetasIngreso(vm, d, { nav.popBackStack() }, { nav.navigate("monto") }) }
@@ -178,6 +180,7 @@ fun App(vm: AppViewModel) {
                             composable("editar/{tipo}/{id}") { e ->
                                 PantallaEditar(vm, d, e.arguments?.getString("tipo") ?: "", e.arguments?.getString("id") ?: "nuevo") { nav.popBackStack() }
                             }
+                            composable("fechas") { PantallaFechasPago(vm, d) { nav.popBackStack() } }
                             composable("reparto") { PantallaReparto(vm, d) { nav.popBackStack() } }
                             composable("config") { PantallaConfig(vm, d, { nav.popBackStack() }, ::pedirPermiso) }
                             composable("datos") {

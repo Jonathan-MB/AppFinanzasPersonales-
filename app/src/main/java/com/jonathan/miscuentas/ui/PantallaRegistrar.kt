@@ -336,6 +336,9 @@ fun PantallaMonto(vm: AppViewModel, datos: Datos, alVolver: () -> Unit, alGuarda
     var monto by remember { mutableStateOf(sugerido) }
     var fecha by remember { mutableStateOf<LocalDate?>(vm.hoy()) }
     var nota by remember { mutableStateOf("") }
+    // recibos y tarjetas: se paga completo aunque el valor cambie, o como abono
+    val esRecibo = sel is Seleccion.Pago && sel.obligacion.tipoOrigen != Origen.PRESUPUESTO
+    var completo by remember { mutableStateOf(true) }
     val foco = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { foco.requestFocus() } }
 
@@ -348,7 +351,7 @@ fun PantallaMonto(vm: AppViewModel, datos: Datos, alVolver: () -> Unit, alGuarda
                 Text(titulo, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             }
             if (sel is Seleccion.Pago) {
-                Text("Fecha del pago: ${Formato.fecha(Fechas.iso(sel.obligacion.fecha))} · falta ${Formato.pesos(sel.obligacion.falta)}", fontSize = 13.sp)
+                Text("Se paga el ${Formato.fecha(Fechas.iso(sel.obligacion.fecha))} · presupuestado ${Formato.pesos(sel.obligacion.estimado)} · falta ${Formato.pesos(sel.obligacion.falta)}", fontSize = 13.sp)
             }
             if (sel is Seleccion.Etiqueta) {
                 sel.etiqueta.presupuestoId?.let { pid ->
@@ -361,6 +364,15 @@ fun PantallaMonto(vm: AppViewModel, datos: Datos, alVolver: () -> Unit, alGuarda
             }
             Spacer(Modifier.height(10.dp))
             CampoPesos("¿Cuánto fue?", monto, { monto = it }, Modifier.focusRequester(foco), grande = true)
+            if (esRecibo) {
+                Text("¿Cómo quedó este pago?", fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
+                SelectorChips(listOf("si" to "✓ Pago completo", "no" to "Es un abono"), if (completo) "si" else "no") { completo = it == "si" }
+                Text(
+                    if (completo) "Queda pagado aunque el valor sea distinto (ej. recibo de luz o tarjeta que llegó por otro valor)."
+                    else "Queda debiendo lo que falta para completar ${Formato.pesos((sel as Seleccion.Pago).obligacion.falta)}.",
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             CampoFecha("Fecha", fecha, { fecha = it })
             CampoTexto("Nota (opcional)", nota, { nota = it })
             Spacer(Modifier.height(16.dp))
@@ -369,7 +381,7 @@ fun PantallaMonto(vm: AppViewModel, datos: Datos, alVolver: () -> Unit, alGuarda
                 onClick = {
                     val m = monto ?: return@Button
                     val f = fecha ?: return@Button
-                    if (esIngreso) vm.registrarIngreso(sel, m, f, nota) else vm.registrarGasto(sel, m, f, nota)
+                    if (esIngreso) vm.registrarIngreso(sel, m, f, nota) else vm.registrarGasto(sel, m, f, nota, esRecibo && completo)
                     vm.seleccion = null
                     alGuardar((if (esIngreso) "Ingreso" else "Gasto") + " guardado: ${Formato.pesos(m)} · $titulo")
                 },

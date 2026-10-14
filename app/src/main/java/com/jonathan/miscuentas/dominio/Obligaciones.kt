@@ -32,6 +32,9 @@ data class Obligacion(
     val pagado: Long = 0,
     val deudaId: String? = null,
     val aviso: String? = null,
+    // lo que se pensaba pagar antes de pagarlo completo por otro valor
+    val estimado: Long = presupuestado,
+    val liquidada: Boolean = false,
 ) {
     val mes: YearMonth get() = YearMonth.from(fecha)
     val falta: Long get() = maxOf(0, presupuestado - pagado)
@@ -164,12 +167,21 @@ object Obligaciones {
     fun conPagos(base: List<Obligacion>, movimientos: List<Movimiento>): List<Obligacion> {
         val porClave = base.associateBy { it.clave }
         val pagos = mutableMapOf<String, Long>()
+        val liquidadas = mutableSetOf<String>()
         movimientos.forEach { m ->
             val c = m.claveObligacion ?: return@forEach
             val destino = if (porClave.containsKey(c)) c else reasignar(c, base)
-            if (destino != null) pagos[destino] = (pagos[destino] ?: 0) + m.monto
+            if (destino != null) {
+                pagos[destino] = (pagos[destino] ?: 0) + m.monto
+                if (m.liquida) liquidadas += destino
+            }
         }
-        return base.map { it.copy(pagado = pagos[it.clave] ?: 0) }
+        // pago completo: lo pagado pasa a ser el valor real del mes
+        return base.map {
+            val pagado = pagos[it.clave] ?: 0
+            if (it.clave in liquidadas) it.copy(pagado = pagado, presupuestado = pagado, estimado = it.presupuestado, liquidada = true)
+            else it.copy(pagado = pagado)
+        }
     }
 
     private fun reasignar(clave: String, base: List<Obligacion>): String? {
@@ -178,6 +190,18 @@ object Obligaciones {
         val f = Fechas.leer(partes[2]) ?: return null
         val candidatas = base.filter { it.tipoOrigen == partes[0] && it.origenId == partes[1] && it.mes == YearMonth.from(f) }
         return candidatas.minByOrNull { kotlin.math.abs(it.fecha.toEpochDay() - f.toEpochDay()) }?.clave
+    }
+
+    // quincena de una fecha: del 1 al 15 o del 16 al fin de mes
+    fun quincena(fecha: LocalDate): Pair<LocalDate, LocalDate> {
+        val ym = YearMonth.from(fecha)
+        return if (fecha.dayOfMonth <= 15) ym.atDay(1) to ym.atDay(15) else ym.atDay(16) to ym.atEndOfMonth()
+    }
+
+    // pagos de la quincena sin contar los presupuestos de gasto
+    fun pagosQuincena(datos: Datos, fecha: LocalDate): List<Obligacion> {
+        val (desde, hasta) = quincena(fecha)
+        return generar(datos, desde, hasta).filter { it.tipoOrigen != Origen.PRESUPUESTO && it.presupuestado > 0 }
     }
 
     // la quincena o periodo del presupuesto al que cae un gasto de esa fecha

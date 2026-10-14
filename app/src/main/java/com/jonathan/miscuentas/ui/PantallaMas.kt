@@ -31,10 +31,11 @@ object TipoLista {
 }
 
 @Composable
-fun PantallaMas(irDeudas: () -> Unit, irLista: (String) -> Unit, irReparto: () -> Unit, irConfig: () -> Unit, irDatos: () -> Unit) {
+fun PantallaMas(irDeudas: () -> Unit, irLista: (String) -> Unit, irReparto: () -> Unit, irConfig: () -> Unit, irDatos: () -> Unit, irFechas: () -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Text("Más", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
+        OpcionMenu("📆", "Fechas de pago", "Ver y corregir el día de pago de todo", irFechas)
         OpcionMenu("💳", "Deudas", "Saldos, simulador y plan de ataque", irDeudas)
         OpcionMenu("🏠", "Gastos fijos", "Arriendo, servicios, semanales…") { irLista(TipoLista.GASTO) }
         OpcionMenu("🎯", "Presupuestos", "Topes por quincena, mes o rango") { irLista(TipoLista.PRESUPUESTO) }
@@ -406,6 +407,76 @@ fun PantallaDatos(exportar: () -> Unit, importar: () -> Unit, resultado: String?
             TituloSeccion("Respaldos automáticos en la app")
             if (respaldos.isEmpty()) Vacio("Aún no hay respaldos.")
             respaldos.forEach { Text("• $it", fontSize = 13.sp) }
+        }
+    }
+}
+
+// todas las fechas de pago en un solo lugar para confirmarlas o cambiarlas
+@Composable
+fun PantallaFechasPago(vm: AppViewModel, datos: Datos, alVolver: () -> Unit) {
+    Column(Modifier.fillMaxSize()) {
+        Encabezado("Fechas de pago", alVolver)
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
+            Text("Cambia el día y toca Guardar. Los pagos ya hechos se conservan en su mes.", fontSize = 13.sp)
+            val pendientesConfirmar = datos.gastosFijos.count { it.activo && !it.diaConfirmado }
+            if (pendientesConfirmar > 0) {
+                Text("⚠ $pendientesConfirmar gastos con el día sin confirmar", color = Colores.amarillo, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
+            }
+
+            TituloSeccion("Deudas")
+            datos.deudas.filter { it.activa }.sortedBy { it.diaPago ?: 99 }.forEach { d ->
+                when {
+                    d.cuotaMensual > 0 -> FilaDia(d.nombre, Formato.pesos(d.cuotaMensual), d.diaPago, true) { dia ->
+                        vm.guardar(d.copy(diaPago = dia))
+                    }
+                    d.fechaFin != null -> FilaDato(d.nombre, "pago único ${Formato.fecha(d.fechaFin)}")
+                    else -> FilaDato(d.nombre, "sin fecha fija")
+                }
+            }
+
+            TituloSeccion("Gastos fijos")
+            datos.gastosFijos.filter { it.activo }.forEach { g ->
+                when (g.frecuencia) {
+                    Frecuencia.MENSUAL -> FilaDia(g.nombre, Formato.pesos(g.valor), g.diaPago, g.diaConfirmado) { dia ->
+                        vm.guardar(g.copy(diaPago = dia, diaConfirmado = true))
+                    }
+                    Frecuencia.SEMANAL -> FilaDato(g.nombre, "cada ${Formato.nombreDiaSemana(g.diaSemana ?: 6)}")
+                    else -> FilaDato(g.nombre, "días 15 y 30")
+                }
+            }
+
+            TituloSeccion("Ingresos")
+            datos.ingresosProgramados.filter { it.activo }.forEach { i ->
+                if (i.frecuencia == FrecuenciaIngreso.UNICO) FilaDato(i.nombre, Formato.fecha(i.fecha))
+                else FilaDia(i.nombre, Formato.pesos(i.monto), i.dia, true) { dia -> vm.guardar(i.copy(dia = dia)) }
+            }
+
+            TituloSeccion("Eventos")
+            datos.eventos.sortedBy { it.fecha }.forEach { e -> FilaDato(e.nombre, Formato.fecha(e.fecha)) }
+            Spacer(Modifier.height(60.dp))
+        }
+    }
+}
+
+@Composable
+private fun FilaDia(nombre: String, valor: String, dia: Int?, confirmado: Boolean, guardar: (Int) -> Unit) {
+    var texto by remember(dia) { mutableStateOf(dia?.toString() ?: "") }
+    val nuevo = texto.toIntOrNull()?.takeIf { it in 1..31 }
+    Card(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(nombre, fontWeight = FontWeight.Bold)
+                Text(valor + if (!confirmado) " · ⚠ confirma este día" else "", fontSize = 12.sp,
+                    color = if (!confirmado) Colores.amarillo else MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            OutlinedTextField(
+                value = texto, onValueChange = { texto = it.filter { c -> c.isDigit() }.take(2) },
+                label = { Text("día") }, singleLine = true, modifier = Modifier.width(76.dp),
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+            )
+            TextButton(enabled = nuevo != null && (nuevo != dia || !confirmado), onClick = { nuevo?.let(guardar) }) {
+                Text(if (!confirmado && nuevo == dia) "Confirmar" else "Guardar")
+            }
         }
     }
 }

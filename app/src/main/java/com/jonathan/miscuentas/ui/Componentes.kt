@@ -16,7 +16,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
@@ -159,12 +161,21 @@ private object Miles : VisualTransformation {
 
 @Composable
 fun CampoPesos(etiqueta: String, valor: Long?, alCambiar: (Long?) -> Unit, modifier: Modifier = Modifier, grande: Boolean = false) {
-    var texto by remember(valor) { mutableStateOf(valor?.toString() ?: "") }
+    // si viene con un valor queda todo seleccionado para escribir encima
+    var campo by remember {
+        val t = valor?.toString() ?: ""
+        mutableStateOf(TextFieldValue(t, TextRange(0, t.length)))
+    }
+    if (campo.text.toLongOrNull() != valor) {
+        val t = valor?.toString() ?: ""
+        campo = TextFieldValue(t, TextRange(t.length))
+    }
     OutlinedTextField(
-        value = texto,
+        value = campo,
         onValueChange = { nuevo ->
-            val limpio = nuevo.filter { it.isDigit() }.trimStart('0').take(13)
-            texto = limpio
+            val limpio = nuevo.text.filter { it.isDigit() }.trimStart('0').take(13)
+            val cursor = nuevo.selection.end.coerceAtMost(limpio.length)
+            campo = TextFieldValue(limpio, if (limpio == nuevo.text) nuevo.selection else TextRange(cursor))
             alCambiar(limpio.toLongOrNull())
         },
         label = { Text(etiqueta) },

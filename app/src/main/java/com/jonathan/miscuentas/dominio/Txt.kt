@@ -17,7 +17,7 @@ object Txt {
         "INGRESOS_PROGRAMADOS" to "id|nombre|monto|frecuencia|dia|fecha|tipo|es_estimado|activo|notas",
         "EVENTOS" to "id|nombre|monto|fecha|categoria|deuda_id|notas",
         "CALENDARIO" to "clave|fecha|concepto|categoria|presupuestado|pagado|falta|estado",
-        "MOVIMIENTOS" to "id|fecha|monto|tipo|clave_obligacion|categoria|deuda_id|nota",
+        "MOVIMIENTOS" to "id|fecha|monto|tipo|clave_obligacion|categoria|deuda_id|nota|liquida",
         "INGRESOS" to "id|fecha|monto|tipo|clave_ingreso_programado|nota",
         "CATEGORIAS" to "nombre|es_sistema|emoji|tipo|orden|presupuesto_id|id",
     )
@@ -120,7 +120,7 @@ object Txt {
         linea("")
         linea("[MOVIMIENTOS]"); linea(cabeceras.getValue("MOVIMIENTOS"))
         datos.movimientos.sortedWith(compareBy({ it.fecha }, { it.id })).forEach { m ->
-            linea(fila(m.id, m.fecha, m.monto, m.tipo, m.claveObligacion, m.categoria, m.deudaId, m.nota))
+            linea(fila(m.id, m.fecha, m.monto, m.tipo, m.claveObligacion, m.categoria, m.deudaId, m.nota, m.liquida))
         }
         linea("")
         linea("[INGRESOS]"); linea(cabeceras.getValue("INGRESOS"))
@@ -241,7 +241,7 @@ object Txt {
         }
         val movimientos = leer("MOVIMIENTOS") { c ->
             Movimiento(requerido(c.s(0), "id"), fechaOk(requerido(c.s(1), "fecha"))!!, c.l(2), c.s(7), c.sn(4),
-                c.s(3).ifBlank { TipoMovimiento.NO_PLANEADO }, c.s(5), c.sn(6), ahora, ahora)
+                c.s(3).ifBlank { TipoMovimiento.NO_PLANEADO }, c.s(5), c.sn(6), ahora, ahora, liquida = c.b(8, false))
         }
         val ingresos = leer("INGRESOS") { c ->
             Ingreso(requerido(c.s(0), "id"), fechaOk(requerido(c.s(1), "fecha"))!!, c.l(2), c.s(3).ifBlank { TipoIngreso.OTRO }, c.s(5), c.sn(4), ahora, ahora)

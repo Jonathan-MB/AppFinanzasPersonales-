@@ -94,6 +94,13 @@ object Avisos {
             notificar(context, 11, "En ${datos.config.diasAviso} días pagas",
                 proximos.joinToString("\n") { "${it.concepto}: ${Formato.pesos(it.falta)} (${Formato.fecha(Fechas.iso(it.fecha))})" })
         }
+        // los que ya pasaron y siguen sin pagar
+        val inicio = Fechas.leer(datos.config.fechaInicio) ?: hoy
+        val vencidos = Obligaciones.generar(datos, inicio, hoy.minusDays(1)).filter { it.falta > 0 && it.tipoOrigen != Origen.PRESUPUESTO }
+        if (vencidos.isNotEmpty()) {
+            notificar(context, 12, "Tienes ${vencidos.size} pagos vencidos",
+                vencidos.joinToString("\n") { "${it.concepto}: ${Formato.pesos(it.falta)} (${Formato.fecha(Fechas.iso(it.fecha))})" })
+        }
     }
 
     // aviso cuando un presupuesto pasa del 80 y del 100

@@ -15,7 +15,7 @@ import com.jonathan.miscuentas.dominio.*
 import java.time.YearMonth
 
 @Composable
-fun PantallaInicio(vm: AppViewModel, datos: Datos, irMonto: () -> Unit, irDeudas: () -> Unit, irCalendario: () -> Unit) {
+fun PantallaInicio(vm: AppViewModel, datos: Datos, irMonto: () -> Unit, irDeudas: () -> Unit, irCalendario: () -> Unit, irDetalle: (Obligacion) -> Unit) {
     val hoy = vm.hoy()
     val mes = YearMonth.from(hoy)
     fun enMes(f: String) = Fechas.leer(f)?.let { YearMonth.from(it) == mes } ?: false
@@ -49,6 +49,8 @@ fun PantallaInicio(vm: AppViewModel, datos: Datos, irMonto: () -> Unit, irDeudas
             Cifra("Avance del mes", avance?.let { Formato.porcentaje(it) } ?: "—", MaterialTheme.colorScheme.primary, Modifier.weight(1f))
         }
 
+        SeccionQuincena(vm, datos, irMonto, irDetalle)
+
         // presupuestos de esta quincena
         val presupuestos = datos.presupuestos.filter { it.activo }.mapNotNull { Obligaciones.instanciaPresupuesto(datos, it.id, hoy) }
         if (presupuestos.isNotEmpty()) {
@@ -63,10 +65,11 @@ fun PantallaInicio(vm: AppViewModel, datos: Datos, irMonto: () -> Unit, irDeudas
             }
         }
 
-        // proximos pagos pendientes
-        val pendientes = (vencidos + todas.filter { it.fecha >= hoy && it.falta > 0 && it.tipoOrigen != Origen.PRESUPUESTO }).distinctBy { it.clave }.take(10)
-        TituloSeccion("Próximos 10 pagos pendientes")
-        if (pendientes.isEmpty()) Vacio("No tienes pagos pendientes.")
+        // lo que viene despues de esta quincena
+        val finQuincena = Obligaciones.quincena(hoy).second
+        val pendientes = todas.filter { it.fecha > finQuincena && it.falta > 0 && it.tipoOrigen != Origen.PRESUPUESTO }.take(10)
+        TituloSeccion("Después de esta quincena")
+        if (pendientes.isEmpty()) Vacio("No hay pagos programados después de esta quincena.")
         pendientes.forEach { o -> FilaPago(o, hoy) { vm.seleccion = Seleccion.Pago(o); irMonto() } }
 
         // graficas
@@ -114,5 +117,61 @@ fun Cifra(titulo: String, valor: String, color: Color, modifier: Modifier = Modi
     Tarjeta(modifier, onClick = onClick) {
         Text(titulo, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(valor, fontWeight = FontWeight.Bold, color = color, fontSize = 16.sp)
+    }
+}
+
+// todos los pagos de la quincena en orden, porque se pagan casi todos juntos
+@Composable
+fun SeccionQuincena(vm: AppViewModel, datos: Datos, irMonto: () -> Unit, irDetalle: (Obligacion) -> Unit) {
+    val hoy = vm.hoy()
+    val confirmar = LocalConfirmador.current
+    val (desde, hasta) = Obligaciones.quincena(hoy)
+    val pagos = Obligaciones.pagosQuincena(datos, hoy)
+    val inicio = Fechas.leer(datos.config.fechaInicio) ?: hoy
+    val atrasados = Obligaciones.generar(datos, inicio, desde.minusDays(1)).filter { it.falta > 0 && it.tipoOrigen != Origen.PRESUPUESTO }
+    val pendientes = atrasados + pagos.filter { it.falta > 0 }
+
+    TituloSeccion("Pagos de esta quincena (${desde.dayOfMonth} al ${Formato.fechaCorta(hasta)})")
+    Tarjeta {
+        FilaDato("Total de la quincena", Formato.pesos(pagos.sumOf { it.presupuestado }), negrita = true)
+        FilaDato("Pagado", Formato.pesos(pagos.sumOf { it.pagado }), Colores.verde)
+        FilaDato("Falta", Formato.pesos(pendientes.sumOf { it.falta }), if (pendientes.isEmpty()) Colores.verde else Colores.rojo, negrita = true)
+        Spacer(Modifier.height(6.dp))
+        BarraProgreso(pagos.sumOf { minOf(it.pagado, it.presupuestado) }, pagos.sumOf { it.presupuestado })
+        if (pendientes.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            androidx.compose.material3.OutlinedButton(onClick = {
+                confirmar.preguntar(
+                    "Pagar todo",
+                    "Se registran ${pendientes.size} pagos por ${Formato.pesos(pendientes.sumOf { it.falta })} con la fecha de hoy. Si algún recibo llegó por otro valor, mejor págalo uno por uno.",
+                    "Pagar todo",
+                ) { vm.pagarTodo(pendientes, hoy) }
+            }, modifier = Modifier.fillMaxWidth()) { Text("Pagar todo lo pendiente") }
+        }
+    }
+    if (atrasados.isNotEmpty()) {
+        Text("De antes y sin pagar", fontWeight = FontWeight.Bold, color = Colores.rojo, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
+        atrasados.forEach { o -> FilaPago(o, hoy) { vm.seleccion = Seleccion.Pago(o); irMonto() } }
+    }
+    Spacer(Modifier.height(6.dp))
+    if (pagos.isEmpty()) Vacio("No hay pagos en esta quincena.")
+    pagos.forEach { o ->
+        if (o.falta > 0) {
+            FilaPago(o, hoy) { vm.seleccion = Seleccion.Pago(o); irMonto() }
+        } else {
+            androidx.compose.material3.Card(onClick = { irDetalle(o) }, modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                Row(Modifier.padding(12.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text("✓ " + o.concepto, fontWeight = FontWeight.Bold, color = Colores.verde)
+                        Text(
+                            "${Formato.diaSemana(o.fecha)} ${Formato.fechaCorta(o.fecha)}" +
+                                if (o.liquidada && o.estimado != o.pagado) " · presupuestado ${Formato.pesos(o.estimado)}" else "",
+                            fontSize = 12.sp,
+                        )
+                    }
+                    Text(Formato.pesos(o.pagado), fontWeight = FontWeight.Bold)
+                }
+            }
+        }
     }
 }

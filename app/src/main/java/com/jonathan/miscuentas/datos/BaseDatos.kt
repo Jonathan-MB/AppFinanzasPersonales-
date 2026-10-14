@@ -10,6 +10,7 @@ import androidx.room.RoomDatabase
 import androidx.room.Transaction
 import androidx.room.Upsert
 import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.jonathan.miscuentas.dominio.*
 import kotlinx.coroutines.flow.Flow
 
@@ -84,15 +85,21 @@ interface FinanzasDao {
 @Database(
     entities = [Config::class, Deuda::class, DeudaSaldo::class, GastoFijo::class, Presupuesto::class,
         IngresoProgramado::class, Evento::class, Movimiento::class, Ingreso::class, Categoria::class],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class BaseDatos : RoomDatabase() {
     abstract fun dao(): FinanzasDao
 
     companion object {
-        // aqui van los cambios de version de la base, ej. 1 -> 2
-        val MIGRACIONES: Array<Migration> = arrayOf()
+        // cambios de version de la base
+        private val DE_1_A_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE movimientos ADD COLUMN liquida INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        val MIGRACIONES: Array<Migration> = arrayOf(DE_1_A_2)
 
         @Volatile private var instancia: BaseDatos? = null
 

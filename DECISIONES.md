@@ -36,12 +36,14 @@ Lo que se decidió sin estar definido en el documento original.
 
 ## TXT
 - Se agregaron columnas al final para no perder datos al importar: `fecha_fin` y `fijada_arriba` en DEUDAS, `dia_confirmado` en GASTOS_FIJOS, `id` en DEUDA_SALDOS, y `emoji|tipo|orden|presupuesto_id|id` en CATEGORIAS. Las primeras columnas respetan el orden original.
+- MOVIMIENTOS tiene la columna `liquida` al final (si el pago se marcó como completo). Los TXT viejos sin esa columna se leen como `no`.
 - Booleanos como `si` / `no`. Tasas con punto decimal.
 - `created_at` y `updated_at` no se exportan; al importar se ponen con la fecha actual.
 
 ## Avisos
 - En vez de programar una alarma por cada pago, la app revisa todos los días a la hora de aviso los pagos de hoy y los de dentro de N días. No tiene límite de 60 días y se reprograma al reiniciar el celular.
 - Las alertas de presupuesto (80 % y 100 %) salen al guardar el gasto.
+- En la misma revisión diaria se avisa si hay pagos de días anteriores que siguen sin pagar (sin contar presupuestos).
 
 ## Respaldos
 - Respaldo automático semanal en la carpeta interna de la app (se guardan los 10 más recientes), además de antes de importar y antes de borrar todo.
@@ -49,3 +51,10 @@ Lo que se decidió sin estar definido en el documento original.
 ## Datos personales
 - Los datos propios no están en el código. Van en `app/src/main/assets/datos_personales.txt`, que está en `.gitignore`. Sin ese archivo la app arranca vacía con las etiquetas por defecto.
 - Las pruebas usan datos inventados.
+
+## Pagos variables y quincena
+- Un pago puede marcarse como completo aunque el valor sea distinto al presupuestado (recibos de servicios o tarjetas). Ese mes el presupuestado pasa a ser lo pagado y el original se guarda como estimado para mostrarlo.
+- Si se marca como abono queda debiendo la diferencia. Por defecto sale en pago completo.
+- Los presupuestos no tienen esta opción porque son topes, no deudas.
+- La quincena va del 1 al 15 y del 16 al fin de mes. En Inicio salen todos sus pagos en orden, los de antes sin pagar aparte, y "Pagar todo" registra lo que falta de cada uno con la fecha de hoy.
+- Base de datos versión 2: la migración agrega la columna `liquida` a movimientos sin borrar nada.
