@@ -27,6 +27,8 @@ interface FinanzasDao {
     @Query("SELECT * FROM movimientos ORDER BY fecha DESC, createdAt DESC") fun movimientos(): Flow<List<Movimiento>>
     @Query("SELECT * FROM ingresos ORDER BY fecha DESC, createdAt DESC") fun ingresos(): Flow<List<Ingreso>>
     @Query("SELECT * FROM categorias ORDER BY orden, nombre") fun categorias(): Flow<List<Categoria>>
+    @Query("SELECT * FROM cuentas ORDER BY orden, nombre") fun cuentas(): Flow<List<Cuenta>>
+    @Query("SELECT * FROM cuenta_movs ORDER BY fecha DESC, createdAt DESC") fun cuentaMovs(): Flow<List<CuentaMov>>
 
     @Upsert suspend fun guardar(v: Config)
     @Upsert suspend fun guardar(v: Deuda)
@@ -38,6 +40,8 @@ interface FinanzasDao {
     @Upsert suspend fun guardar(v: Movimiento)
     @Upsert suspend fun guardar(v: Ingreso)
     @Upsert suspend fun guardar(v: Categoria)
+    @Upsert suspend fun guardar(v: Cuenta)
+    @Upsert suspend fun guardar(v: CuentaMov)
 
     @Delete suspend fun borrar(v: Deuda)
     @Delete suspend fun borrar(v: DeudaSaldo)
@@ -48,6 +52,8 @@ interface FinanzasDao {
     @Delete suspend fun borrar(v: Movimiento)
     @Delete suspend fun borrar(v: Ingreso)
     @Delete suspend fun borrar(v: Categoria)
+    @Delete suspend fun borrar(v: Cuenta)
+    @Delete suspend fun borrar(v: CuentaMov)
 
     @Upsert suspend fun guardarDeudas(v: List<Deuda>)
     @Upsert suspend fun guardarDeudaSaldos(v: List<DeudaSaldo>)
@@ -58,6 +64,8 @@ interface FinanzasDao {
     @Upsert suspend fun guardarMovimientos(v: List<Movimiento>)
     @Upsert suspend fun guardarIngresos(v: List<Ingreso>)
     @Upsert suspend fun guardarCategorias(v: List<Categoria>)
+    @Upsert suspend fun guardarCuentas(v: List<Cuenta>)
+    @Upsert suspend fun guardarCuentaMovs(v: List<CuentaMov>)
 
     @Query("DELETE FROM config") suspend fun vaciarConfig()
     @Query("DELETE FROM deudas") suspend fun vaciarDeudas()
@@ -69,23 +77,27 @@ interface FinanzasDao {
     @Query("DELETE FROM movimientos") suspend fun vaciarMovimientos()
     @Query("DELETE FROM ingresos") suspend fun vaciarIngresos()
     @Query("DELETE FROM categorias") suspend fun vaciarCategorias()
+    @Query("DELETE FROM cuentas") suspend fun vaciarCuentas()
+    @Query("DELETE FROM cuenta_movs") suspend fun vaciarCuentaMovs()
 
     // cambia todo de una vez, si algo falla no se guarda nada
     @Transaction
     suspend fun reemplazarTodo(d: Datos) {
         vaciarConfig(); vaciarDeudas(); vaciarDeudaSaldos(); vaciarGastos(); vaciarPresupuestos()
         vaciarProgramados(); vaciarEventos(); vaciarMovimientos(); vaciarIngresos(); vaciarCategorias()
+        vaciarCuentas(); vaciarCuentaMovs()
         guardar(d.config)
         guardarDeudas(d.deudas); guardarDeudaSaldos(d.deudaSaldos); guardarGastos(d.gastosFijos)
         guardarPresupuestos(d.presupuestos); guardarProgramados(d.ingresosProgramados); guardarEventos(d.eventos)
         guardarMovimientos(d.movimientos); guardarIngresos(d.ingresos); guardarCategorias(d.categorias)
+        guardarCuentas(d.cuentas); guardarCuentaMovs(d.cuentaMovs)
     }
 }
 
 @Database(
     entities = [Config::class, Deuda::class, DeudaSaldo::class, GastoFijo::class, Presupuesto::class,
-        IngresoProgramado::class, Evento::class, Movimiento::class, Ingreso::class, Categoria::class],
-    version = 2,
+        IngresoProgramado::class, Evento::class, Movimiento::class, Ingreso::class, Categoria::class, Cuenta::class, CuentaMov::class],
+    version = 3,
     exportSchema = true,
 )
 abstract class BaseDatos : RoomDatabase() {
@@ -99,7 +111,24 @@ abstract class BaseDatos : RoomDatabase() {
             }
         }
 
-        val MIGRACIONES: Array<Migration> = arrayOf(DE_1_A_2)
+        // cuentas (davivienda, nequi, efectivo) y movimientos entre ellas
+        private val DE_2_A_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `cuentas` (`id` TEXT NOT NULL, `nombre` TEXT NOT NULL, `emoji` TEXT NOT NULL, `orden` INTEGER NOT NULL, `activa` INTEGER NOT NULL, `createdAt` TEXT NOT NULL, `updatedAt` TEXT NOT NULL, PRIMARY KEY(`id`))")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `cuenta_movs` (`id` TEXT NOT NULL, `fecha` TEXT NOT NULL, `cuentaId` TEXT NOT NULL, `monto` INTEGER NOT NULL, `tipo` TEXT NOT NULL, `grupo` TEXT, `nota` TEXT NOT NULL, `createdAt` TEXT NOT NULL, `updatedAt` TEXT NOT NULL, PRIMARY KEY(`id`))")
+                db.execSQL("ALTER TABLE movimientos ADD COLUMN cuentaId TEXT")
+                db.execSQL("ALTER TABLE ingresos ADD COLUMN cuentaId TEXT")
+                val ahora = Fechas.ahora()
+                Saldos.cuentasPorDefecto(ahora).forEach { c ->
+                    db.execSQL(
+                        "INSERT INTO cuentas (id, nombre, emoji, orden, activa, createdAt, updatedAt) VALUES (?, ?, ?, ?, 1, ?, ?)",
+                        arrayOf<Any>(c.id, c.nombre, c.emoji, c.orden, ahora, ahora),
+                    )
+                }
+            }
+        }
+
+        val MIGRACIONES: Array<Migration> = arrayOf(DE_1_A_2, DE_2_A_3)
 
         @Volatile private var instancia: BaseDatos? = null
 

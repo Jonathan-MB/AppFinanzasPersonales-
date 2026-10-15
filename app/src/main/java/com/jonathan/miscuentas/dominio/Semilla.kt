@@ -8,7 +8,7 @@ object Semilla {
 
     fun datos(ahora: String = Fechas.ahora(), fechaInicio: String = ahora.take(10)): Datos {
         val config = Config(fechaInicio = fechaInicio, createdAt = ahora, updatedAt = ahora)
-        return Datos(config = config, categorias = etiquetas(ahora))
+        return Datos(config = config, categorias = etiquetas(ahora), cuentas = Saldos.cuentasPorDefecto(ahora))
     }
 
     fun etiquetas(ahora: String = Fechas.ahora()): List<Categoria> {

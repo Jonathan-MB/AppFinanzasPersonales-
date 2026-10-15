@@ -53,7 +53,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun borrar(v: Any) = viewModelScope.launch { repo.borrar(v) }
 
     // arma el movimiento segun lo que se toco
-    fun registrarGasto(sel: Seleccion, monto: Long, fecha: LocalDate, nota: String, completo: Boolean = false) = viewModelScope.launch {
+    fun registrarGasto(sel: Seleccion, monto: Long, fecha: LocalDate, nota: String, completo: Boolean = false, cuentaId: String? = null) = viewModelScope.launch {
         val d = datos.value ?: return@launch
         val iso = Fechas.iso(fecha)
         var claveRevisar: Obligacion? = null
@@ -78,42 +78,47 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
             else -> return@launch
         }
-        repo.guardar(mov)
+        repo.guardar(mov.copy(cuentaId = cuentaId ?: Saldos.porDefecto(d)))
         claveRevisar?.let { antes ->
             val despues = antes.copy(pagado = antes.pagado + monto)
             Avisos.revisarPresupuesto(getApplication(), antes, despues)
         }
     }
 
-    fun registrarIngreso(sel: Seleccion, monto: Long, fecha: LocalDate, nota: String) = viewModelScope.launch {
+    fun registrarIngreso(sel: Seleccion, monto: Long, fecha: LocalDate, nota: String, cuentaId: String? = null) = viewModelScope.launch {
+        val d = datos.value ?: return@launch
         val iso = Fechas.iso(fecha)
         val ingreso = when (sel) {
             is Seleccion.IngresoEsperadoSel -> Ingreso(nuevoId(), iso, monto, sel.esperado.tipo, nota.ifBlank { sel.esperado.concepto }, sel.esperado.clave)
             is Seleccion.IngresoEtiqueta -> Ingreso(nuevoId(), iso, monto, Semilla.tipoIngreso(sel.etiqueta.nombre), nota.ifBlank { sel.etiqueta.nombre })
             else -> return@launch
         }
-        repo.guardar(ingreso)
+        repo.guardar(ingreso.copy(cuentaId = cuentaId ?: Saldos.porDefecto(d)))
     }
 
     // paga de una vez todo lo pendiente por lo que falta
     fun pagarTodo(lista: List<Obligacion>, fecha: LocalDate) = viewModelScope.launch {
+        val cuenta = datos.value?.let { Saldos.porDefecto(it) }
         lista.filter { it.falta > 0 }.forEach { o ->
-            repo.guardar(Movimiento(nuevoId(), Fechas.iso(fecha), o.falta, "", o.clave, TipoMovimiento.PAGO_PROGRAMADO, o.categoria, o.deudaId, liquida = true))
+            repo.guardar(Movimiento(nuevoId(), Fechas.iso(fecha), o.falta, "", o.clave, TipoMovimiento.PAGO_PROGRAMADO, o.categoria, o.deudaId, liquida = true, cuentaId = cuenta))
         }
     }
 
     fun moto(monto: Long, fecha: LocalDate) = viewModelScope.launch {
-        repo.guardar(Ingreso(nuevoId(), Fechas.iso(fecha), monto, TipoIngreso.MOTO, "Moto"))
+        repo.guardar(Ingreso(nuevoId(), Fechas.iso(fecha), monto, TipoIngreso.MOTO, "Moto", cuentaId = datos.value?.let { Saldos.porDefecto(it) }))
     }
 
-    // diferencia con lo que de verdad tiene
-    fun ajustarSaldoReal(real: Long, crearGasto: Boolean) = viewModelScope.launch {
+    // deja cada cuenta igual a lo que se tiene de verdad y anota el desfase
+    fun cuadrar(reales: Map<String, Long>) = viewModelScope.launch {
         val d = datos.value ?: return@launch
-        val dif = Calculos.deberiaTener(d) - real
-        repo.guardar(d.config.copy(saldoReal = real, fechaSaldoReal = Fechas.iso(hoy())))
-        if (crearGasto && dif > 0) {
-            repo.guardar(Movimiento(nuevoId(), Fechas.iso(hoy()), dif, "Gastos sin registrar", null, TipoMovimiento.NO_PLANEADO, "otros"))
-        }
+        val total = reales.values.sum()
+        repo.guardar(Saldos.cuadrar(d, reales, Fechas.iso(hoy())))
+        repo.guardar(d.config.copy(saldoReal = total, fechaSaldoReal = Fechas.iso(hoy())))
+    }
+
+    // envio entre cuentas o retiro, no cambia el total
+    fun mover(desde: String, hacia: String, monto: Long, fecha: LocalDate, nota: String) = viewModelScope.launch {
+        repo.guardar(Saldos.trasladar(desde, hacia, monto, Fechas.iso(fecha), nota))
     }
 
     fun actualizarSaldoExtracto(deuda: Deuda, saldo: Long, fecha: LocalDate) = viewModelScope.launch {

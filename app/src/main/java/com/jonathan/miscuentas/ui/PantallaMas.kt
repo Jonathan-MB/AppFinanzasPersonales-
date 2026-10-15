@@ -31,11 +31,12 @@ object TipoLista {
 }
 
 @Composable
-fun PantallaMas(irDeudas: () -> Unit, irLista: (String) -> Unit, irReparto: () -> Unit, irConfig: () -> Unit, irDatos: () -> Unit, irFechas: () -> Unit) {
+fun PantallaMas(irDeudas: () -> Unit, irLista: (String) -> Unit, irReparto: () -> Unit, irConfig: () -> Unit, irDatos: () -> Unit, irFechas: () -> Unit, irCuentas: () -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Text("Más", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
         OpcionMenu("📆", "Fechas de pago", "Ver y corregir el día de pago de todo", irFechas)
+        OpcionMenu("🏦", "Cuentas", "Davivienda, Nequi, efectivo…", irCuentas)
         OpcionMenu("💳", "Deudas", "Saldos, simulador y plan de ataque", irDeudas)
         OpcionMenu("🏠", "Gastos fijos", "Arriendo, servicios, semanales…") { irLista(TipoLista.GASTO) }
         OpcionMenu("🎯", "Presupuestos", "Topes por quincena, mes o rango") { irLista(TipoLista.PRESUPUESTO) }

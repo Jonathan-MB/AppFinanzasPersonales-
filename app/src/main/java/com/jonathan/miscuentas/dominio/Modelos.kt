@@ -131,6 +131,8 @@ data class Movimiento(
     val updatedAt: String = "",
     // pago completo aunque el valor sea distinto al presupuestado
     val liquida: Boolean = false,
+    // de que cuenta salio; vacio es la cuenta principal
+    val cuentaId: String? = null,
 )
 
 @Entity(tableName = "ingresos")
@@ -143,7 +145,44 @@ data class Ingreso(
     val claveIngresoProgramado: String? = null,
     val createdAt: String = "",
     val updatedAt: String = "",
+    // a que cuenta entro; vacio es la cuenta principal
+    val cuentaId: String? = null,
 )
+
+// donde esta la plata: davivienda, nequi, efectivo...
+@Entity(tableName = "cuentas")
+data class Cuenta(
+    @PrimaryKey val id: String,
+    val nombre: String,
+    val emoji: String = "🏦",
+    val orden: Int = 0,
+    val activa: Boolean = true,
+    val createdAt: String = "",
+    val updatedAt: String = "",
+)
+
+// plata que se mueve sin ser gasto ni ingreso: envios entre cuentas, retiros y ajustes al cuadrar
+@Entity(tableName = "cuenta_movs")
+data class CuentaMov(
+    @PrimaryKey val id: String,
+    val fecha: String,
+    val cuentaId: String,
+    // positivo entra a la cuenta, negativo sale
+    val monto: Long,
+    val tipo: String,
+    // las filas de un mismo envio o de un mismo cuadre
+    val grupo: String? = null,
+    val nota: String = "",
+    val createdAt: String = "",
+    val updatedAt: String = "",
+)
+
+object TipoCuentaMov {
+    const val TRASLADO = "traslado"
+    const val AJUSTE = "ajuste"
+    // marca del cuadre con el desfase total, no mueve plata
+    const val CUADRE = "cuadre"
+}
 
 // las etiquetas que se tocan para registrar un gasto o un ingreso
 @Entity(tableName = "categorias")
@@ -177,6 +216,8 @@ data class Datos(
     val movimientos: List<Movimiento> = emptyList(),
     val ingresos: List<Ingreso> = emptyList(),
     val categorias: List<Categoria> = emptyList(),
+    val cuentas: List<Cuenta> = emptyList(),
+    val cuentaMovs: List<CuentaMov> = emptyList(),
 )
 
 object TipoDeuda {

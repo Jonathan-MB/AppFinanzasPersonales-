@@ -31,61 +31,16 @@ import java.time.YearMonth
 fun PantallaRegistrar(vm: AppViewModel, datos: Datos, irGasto: () -> Unit, irIngreso: () -> Unit, irMonto: () -> Unit, irDeudas: () -> Unit, irDetalle: (Obligacion) -> Unit) {
     val hoy = vm.hoy()
     val mes = YearMonth.from(hoy)
-    val deberia = Calculos.deberiaTener(datos)
-    val debo = Calculos.deudaTotal(datos, hoy)
     fun enMes(f: String) = Fechas.leer(f)?.let { YearMonth.from(it) == mes } ?: false
     val entroMes = datos.ingresos.filter { enMes(it.fecha) }.sumOf { it.monto }
     val salioMes = datos.movimientos.filter { enMes(it.fecha) }.sumOf { it.monto }
-    var ajustando by remember { mutableStateOf(false) }
-    var real by remember { mutableStateOf<Long?>(null) }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Text("Hola 👋", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(8.dp))
 
         // control de la plata
-        Tarjeta(color = MaterialTheme.colorScheme.primaryContainer) {
-            Text("Deberías tener hoy", color = MaterialTheme.colorScheme.onPrimaryContainer)
-            Text(Formato.pesos(deberia), fontSize = 34.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
-            Text("Lo que tenías + lo que te han pagado − lo que has gastado", fontSize = 12.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
-            Spacer(Modifier.height(10.dp))
-            Row(Modifier.fillMaxWidth()) {
-                Column(Modifier.weight(1f)) {
-                    Text("Tengo (real)", fontSize = 12.sp)
-                    Text(datos.config.saldoReal?.let { Formato.pesos(it) } ?: "Sin reportar", fontWeight = FontWeight.Bold)
-                    datos.config.fechaSaldoReal?.let { Text("al ${Formato.fecha(it)}", fontSize = 11.sp) }
-                }
-                Column(Modifier.weight(1f).combinedClickable(onClick = irDeudas)) {
-                    Text("Debo", fontSize = 12.sp)
-                    Text(Formato.pesos(debo), fontWeight = FontWeight.Bold, color = Colores.rojo)
-                    Text("ver deudas ›", fontSize = 11.sp)
-                }
-            }
-            datos.config.saldoReal?.let { r ->
-                val dif = deberia - r
-                if (dif != 0L) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        if (dif > 0) "Gastos sin registrar: ${Formato.pesos(dif)}" else "Tienes ${Formato.pesos(-dif)} más de lo calculado",
-                        fontSize = 13.sp, fontWeight = FontWeight.Bold, color = if (dif > 0) Colores.rojo else Colores.verde,
-                    )
-                }
-            }
-            Spacer(Modifier.height(6.dp))
-            TextButton(onClick = { ajustando = !ajustando }, contentPadding = PaddingValues(0.dp)) { Text("Ajustar con mi saldo real") }
-            if (ajustando) {
-                CampoPesos("¿Cuánto tienes de verdad?", real, { real = it })
-                real?.let { r ->
-                    val dif = deberia - r
-                    if (dif > 0) Text("Diferencia: ${Formato.pesos(dif)} en gastos sin registrar", fontSize = 13.sp)
-                    Row {
-                        OutlinedButton(onClick = { vm.ajustarSaldoReal(r, false); ajustando = false }) { Text("Guardar saldo") }
-                        Spacer(Modifier.width(8.dp))
-                        if (dif > 0) Button(onClick = { vm.ajustarSaldoReal(r, true); ajustando = false }) { Text("Crear gasto") }
-                    }
-                }
-            }
-        }
+        TarjetaPlata(vm, datos, irDeudas)
 
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -337,6 +292,7 @@ fun PantallaMonto(vm: AppViewModel, datos: Datos, alVolver: () -> Unit, alGuarda
     var completo by remember { mutableStateOf(true) }
     // evita guardar dos veces con doble toque
     var guardado by remember { mutableStateOf(false) }
+    var cuenta by remember { mutableStateOf(Saldos.porDefecto(datos)) }
     val foco = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { foco.requestFocus() } }
 
@@ -371,6 +327,7 @@ fun PantallaMonto(vm: AppViewModel, datos: Datos, alVolver: () -> Unit, alGuarda
                     fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            SelectorCuenta(datos, if (esIngreso) "¿A qué cuenta entró?" else "¿De dónde salió?", cuenta) { cuenta = it }
             CampoFecha("Fecha", fecha, { fecha = it })
             CampoTexto("Nota (opcional)", nota, { nota = it })
             Spacer(Modifier.height(16.dp))
@@ -381,7 +338,7 @@ fun PantallaMonto(vm: AppViewModel, datos: Datos, alVolver: () -> Unit, alGuarda
                     val m = monto ?: return@Button
                     val f = fecha ?: return@Button
                     guardado = true
-                    if (esIngreso) vm.registrarIngreso(sel, m, f, nota) else vm.registrarGasto(sel, m, f, nota, esRecibo && completo)
+                    if (esIngreso) vm.registrarIngreso(sel, m, f, nota, cuenta) else vm.registrarGasto(sel, m, f, nota, esRecibo && completo, cuenta)
                     vm.seleccion = null
                     alGuardar((if (esIngreso) "Ingreso" else "Gasto") + " guardado: ${Formato.pesos(m)} · $titulo")
                 },

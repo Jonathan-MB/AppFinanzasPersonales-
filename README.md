@@ -7,7 +7,8 @@ Al abrir la app lo primero es elegir **Gasto** o **Ingreso**, tocar una etiqueta
 ## Qué hace
 
 - **Registrar:** gasto o ingreso en dos toques con etiquetas. Se pueden crear etiquetas nuevas y conectarlas a un presupuesto.
-- **Control de la plata:** "Deberías tener hoy" = plata inicial + lo que entró − lo que salió, con ajuste contra el saldo real.
+- **Control de la plata:** "Deberías tener hoy" = plata inicial + lo que entró − lo que salió, repartido en cuentas (Davivienda, Nequi, efectivo y las que se agreguen). Cada gasto o ingreso dice de qué cuenta salió o a cuál entró.
+- **Cuadrar y mover plata:** al cuadrar se escribe cuánto hay de verdad en cada cuenta, se ve el desfase (de menos o de más) y todo queda igual a lo real. Los envíos entre cuentas y los retiros no cambian el total.
 - **Pagos variables:** al pagar un recibo (luz, agua, gas, tarjeta) se puede cambiar el valor. Con **Pago completo** queda pagado aunque sea otro monto; con **Es un abono** queda debiendo lo que falta.
 - **Quincena:** en Inicio salen en orden todos los pagos de la quincena con total, pagado y falta, más un botón para pagar todo de una.
 - **Fechas de pago:** en Más se ve y se corrige el día de pago de deudas, gastos fijos e ingresos.

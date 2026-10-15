@@ -17,9 +17,11 @@ object Txt {
         "INGRESOS_PROGRAMADOS" to "id|nombre|monto|frecuencia|dia|fecha|tipo|es_estimado|activo|notas",
         "EVENTOS" to "id|nombre|monto|fecha|categoria|deuda_id|notas",
         "CALENDARIO" to "clave|fecha|concepto|categoria|presupuestado|pagado|falta|estado",
-        "MOVIMIENTOS" to "id|fecha|monto|tipo|clave_obligacion|categoria|deuda_id|nota|liquida",
-        "INGRESOS" to "id|fecha|monto|tipo|clave_ingreso_programado|nota",
+        "MOVIMIENTOS" to "id|fecha|monto|tipo|clave_obligacion|categoria|deuda_id|nota|liquida|cuenta_id",
+        "INGRESOS" to "id|fecha|monto|tipo|clave_ingreso_programado|nota|cuenta_id",
         "CATEGORIAS" to "nombre|es_sistema|emoji|tipo|orden|presupuesto_id|id",
+        "CUENTAS" to "id|nombre|emoji|orden|activa",
+        "CUENTA_MOVS" to "id|fecha|cuenta_id|monto|tipo|grupo|nota",
     )
 
     private fun limpio(v: Any?): String = when (v) {
@@ -54,7 +56,9 @@ object Txt {
         linea("[RESUMEN]")
         linea(fila("hoy", Fechas.iso(hoy)))
         linea(fila("deberia_tener", Calculos.deberiaTener(datos)))
-        linea(fila("saldo_real_reportado", c.saldoReal, c.fechaSaldoReal))
+        val saldos = Saldos.saldos(datos)
+        datos.cuentas.sortedBy { it.orden }.forEach { k -> linea(fila("saldo_" + k.nombre.lowercase(), saldos[k.id] ?: 0)) }
+        Saldos.ultimoCuadre(datos)?.let { linea(fila("ultimo_cuadre", it.fecha, it.desfase)) }
         linea(fila("ingresos_recibidos_mes", datos.ingresos.filter { enMes(it.fecha) }.sumOf { it.monto }))
         linea(fila("pagado_mes", obligMes.sumOf { it.pagado }))
         linea(fila("no_planeado_mes", datos.movimientos.filter { enMes(it.fecha) && it.tipo == TipoMovimiento.NO_PLANEADO }.sumOf { it.monto }))
@@ -120,17 +124,25 @@ object Txt {
         linea("")
         linea("[MOVIMIENTOS]"); linea(cabeceras.getValue("MOVIMIENTOS"))
         datos.movimientos.sortedWith(compareBy({ it.fecha }, { it.id })).forEach { m ->
-            linea(fila(m.id, m.fecha, m.monto, m.tipo, m.claveObligacion, m.categoria, m.deudaId, m.nota, m.liquida))
+            linea(fila(m.id, m.fecha, m.monto, m.tipo, m.claveObligacion, m.categoria, m.deudaId, m.nota, m.liquida, m.cuentaId))
         }
         linea("")
         linea("[INGRESOS]"); linea(cabeceras.getValue("INGRESOS"))
         datos.ingresos.sortedWith(compareBy({ it.fecha }, { it.id })).forEach { i ->
-            linea(fila(i.id, i.fecha, i.monto, i.tipo, i.claveIngresoProgramado, i.nota))
+            linea(fila(i.id, i.fecha, i.monto, i.tipo, i.claveIngresoProgramado, i.nota, i.cuentaId))
         }
         linea("")
         linea("[CATEGORIAS]"); linea(cabeceras.getValue("CATEGORIAS"))
         datos.categorias.sortedBy { it.orden }.forEach { k ->
             linea(fila(k.nombre, k.esSistema, k.emoji, k.tipo, k.orden, k.presupuestoId, k.id))
+        }
+        linea("")
+        linea("[CUENTAS]"); linea(cabeceras.getValue("CUENTAS"))
+        datos.cuentas.sortedBy { it.orden }.forEach { k -> linea(fila(k.id, k.nombre, k.emoji, k.orden, k.activa)) }
+        linea("")
+        linea("[CUENTA_MOVS]"); linea(cabeceras.getValue("CUENTA_MOVS"))
+        datos.cuentaMovs.sortedWith(compareBy({ it.fecha }, { it.id })).forEach { m ->
+            linea(fila(m.id, m.fecha, m.cuentaId, m.monto, m.tipo, m.grupo, m.nota))
         }
         linea("")
         linea("#FIN")
@@ -252,10 +264,17 @@ object Txt {
         }
         val movimientos = leer("MOVIMIENTOS") { c ->
             Movimiento(requerido(c.s(0), "id"), fechaOk(requerido(c.s(1), "fecha"))!!, c.l(2), c.s(7), c.sn(4),
-                c.s(3).ifBlank { TipoMovimiento.NO_PLANEADO }, c.s(5), c.sn(6), ahora, ahora, liquida = c.b(8, false))
+                c.s(3).ifBlank { TipoMovimiento.NO_PLANEADO }, c.s(5), c.sn(6), ahora, ahora, liquida = c.b(8, false), cuentaId = c.sn(9))
         }
         val ingresos = leer("INGRESOS") { c ->
-            Ingreso(requerido(c.s(0), "id"), fechaOk(requerido(c.s(1), "fecha"))!!, c.l(2), c.s(3).ifBlank { TipoIngreso.OTRO }, c.s(5), c.sn(4), ahora, ahora)
+            Ingreso(requerido(c.s(0), "id"), fechaOk(requerido(c.s(1), "fecha"))!!, c.l(2), c.s(3).ifBlank { TipoIngreso.OTRO }, c.s(5), c.sn(4), ahora, ahora, cuentaId = c.sn(6))
+        }
+        val cuentas = leer("CUENTAS") { c ->
+            Cuenta(requerido(c.s(0), "id"), requerido(c.s(1), "nombre"), c.s(2).ifBlank { "🏦" }, c.i(3) ?: 0, c.b(4, true), ahora, ahora)
+        }
+        val cuentaMovs = leer("CUENTA_MOVS") { c ->
+            // la marca del cuadre no tiene cuenta
+            CuentaMov(requerido(c.s(0), "id"), fechaOk(requerido(c.s(1), "fecha"))!!, c.s(2), c.l(3), requerido(c.s(4), "tipo"), c.sn(5), c.s(6), ahora, ahora)
         }
         val categorias = leer("CATEGORIAS") { c ->
             Categoria(c.sn(6) ?: nuevoId(), requerido(c.s(0), "nombre"), c.b(1, false), c.s(2).ifBlank { "🏷" },
@@ -273,6 +292,8 @@ object Txt {
             movimientos = movimientos ?: actuales.movimientos,
             ingresos = ingresos ?: actuales.ingresos,
             categorias = categorias ?: actuales.categorias,
+            cuentas = cuentas ?: actuales.cuentas,
+            cuentaMovs = cuentaMovs ?: actuales.cuentaMovs,
         )
         return ResultadoImport(datos, errores, secciones.keys)
     }

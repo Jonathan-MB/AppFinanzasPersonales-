@@ -42,8 +42,10 @@ object Calculos {
     }
 
     // regla 3.4
+    // los ajustes de los cuadres cuentan; los envios entre cuentas se anulan solos
     fun deberiaTener(datos: Datos): Long =
-        datos.config.plataInicial + datos.ingresos.sumOf { it.monto } - datos.movimientos.sumOf { it.monto }
+        datos.config.plataInicial + datos.ingresos.sumOf { it.monto } - datos.movimientos.sumOf { it.monto } +
+            datos.cuentaMovs.filter { it.tipo != TipoCuentaMov.CUADRE }.sumOf { it.monto }
 
     // pagos que bajan una deuda
     fun pagosDeuda(deuda: Deuda, movimientos: List<Movimiento>): List<Movimiento> =

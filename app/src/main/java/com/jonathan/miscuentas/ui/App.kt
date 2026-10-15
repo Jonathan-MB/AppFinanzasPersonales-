@@ -140,7 +140,7 @@ fun App(vm: AppViewModel) {
                                 PantallaMovimientos(vm, d, { r -> nav.navigate("registro/${r.id}") }, ::borrarConDeshacer)
                             }
                             composable("mas") {
-                                PantallaMas({ nav.navigate("deudas") }, { nav.navigate("lista/$it") }, { nav.navigate("reparto") }, { nav.navigate("config") }, { nav.navigate("datos") }, { nav.navigate("fechas") })
+                                PantallaMas({ nav.navigate("deudas") }, { nav.navigate("lista/$it") }, { nav.navigate("reparto") }, { nav.navigate("config") }, { nav.navigate("datos") }, { nav.navigate("fechas") }, { nav.navigate("cuentas") })
                             }
                             composable("gasto") { PantallaEtiquetasGasto(vm, d, { nav.popBackStack() }, { nav.navigate("monto") }) }
                             composable("ingreso") { PantallaEtiquetasIngreso(vm, d, { nav.popBackStack() }, { nav.navigate("monto") }) }
@@ -182,6 +182,7 @@ fun App(vm: AppViewModel) {
                                 PantallaEditar(vm, d, e.arguments?.getString("tipo") ?: "", e.arguments?.getString("id") ?: "nuevo") { nav.popBackStack() }
                             }
                             composable("fechas") { PantallaFechasPago(vm, d) { nav.popBackStack() } }
+                            composable("cuentas") { PantallaListaCuentas(vm, d) { nav.popBackStack() } }
                             composable("reparto") { PantallaReparto(vm, d) { nav.popBackStack() } }
                             composable("config") { PantallaConfig(vm, d, { nav.popBackStack() }, ::pedirPermiso) }
                             composable("datos") {

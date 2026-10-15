@@ -45,6 +45,14 @@ Lo que se decidió sin estar definido en el documento original.
 - Las alertas de presupuesto (80 % y 100 %) salen al guardar el gasto.
 - En la misma revisión diaria se avisa si hay pagos de días anteriores que siguen sin pagar (sin contar presupuestos).
 
+## Cuentas y cuadre
+- Antes el saldo real era una foto fija: después de reportarlo no se movía con los gastos y parecía que sobraba plata. Ahora cada cuenta lleva su saldo con lo registrado y la suma de las cuentas siempre es lo que deberías tener.
+- Lo que no tiene cuenta (registros viejos y la plata inicial) va a la primera cuenta activa.
+- Al registrar se propone la última cuenta usada.
+- Cuadrar guarda un ajuste por cada cuenta que no coincide y una marca con el desfase total. Ese ajuste entra en lo que deberías tener, pero no cuenta como gasto ni ingreso del mes.
+- Un envío o retiro son dos filas con el mismo grupo: una sale y otra entra. Borrar desde el historial quita las dos juntas.
+- Base de datos versión 3: la migración crea las tablas de cuentas y la columna `cuentaId` en movimientos e ingresos, y agrega Davivienda, Nequi y Efectivo. En el TXT van las secciones `[CUENTAS]` y `[CUENTA_MOVS]`, y la columna `cuenta_id` al final de movimientos e ingresos. Los TXT viejos se siguen leyendo.
+
 ## Respaldos
 - Respaldo automático semanal en la carpeta interna de la app (se guardan los 10 más recientes), además de antes de importar y antes de borrar todo.
 
