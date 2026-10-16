@@ -161,7 +161,7 @@ fun PantallaListaCuentas(vm: AppViewModel, datos: Datos, alVolver: () -> Unit) {
                 val usada = datos.movimientos.any { it.cuentaId == c.id } || datos.ingresos.any { it.cuentaId == c.id } || datos.cuentaMovs.any { it.cuentaId == c.id }
                 Card(onClick = { editando = c; nueva = false }, modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
                     Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("${c.emoji} ${c.nombre}" + if (!c.activa) " (inactiva)" else "", Modifier.weight(1f), fontWeight = FontWeight.Bold)
+                        Text("${c.emoji} ${c.nombre}" + (if (c.tipo != TipoCuenta.NORMAL) " · ${c.tipo}" else "") + if (!c.activa) " (inactiva)" else "", Modifier.weight(1f), fontWeight = FontWeight.Bold)
                         Text(Formato.pesos(saldos[c.id] ?: 0))
                         if (!usada) TextButton(onClick = { confirmar.preguntar("Borrar cuenta", "¿Borrar ${c.nombre}?") { vm.borrar(c) } }) { Text("✕", color = Colores.rojo) }
                     }
@@ -178,19 +178,22 @@ private fun FormCuenta(inicial: Cuenta?, datos: Datos, alGuardar: (Cuenta) -> Un
     var nombre by remember { mutableStateOf(inicial?.nombre ?: "") }
     var emoji by remember { mutableStateOf(inicial?.emoji ?: emojisCuenta.first()) }
     var activa by remember { mutableStateOf(inicial?.activa ?: true) }
+    var tipo by remember { mutableStateOf(inicial?.tipo ?: TipoCuenta.NORMAL) }
     Tarjeta(Modifier.padding(vertical = 6.dp)) {
         Text(if (inicial == null) "Nueva cuenta" else "Editar cuenta", fontWeight = FontWeight.Bold)
         CampoTexto("Nombre", nombre, { nombre = it })
         FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             emojisCuenta.forEach { e -> FilterChip(selected = e == emoji, onClick = { emoji = e }, label = { Text(e, fontSize = 18.sp) }) }
         }
+        Text("Tipo", fontSize = 13.sp)
+        SelectorChips(listOf(TipoCuenta.NORMAL to "Normal", TipoCuenta.BOLSILLO to "🔒 Bolsillo", TipoCuenta.COLCHON to "🛟 Colchón"), tipo) { tipo = it }
         if (inicial != null) Interruptor("Activa", activa) { activa = it }
         Row {
             TextButton(onClick = alCancelar) { Text("Cancelar") }
             Spacer(Modifier.weight(1f))
             Button(enabled = nombre.isNotBlank(), onClick = {
                 val orden = (datos.cuentas.maxOfOrNull { it.orden } ?: -1) + 1
-                alGuardar((inicial ?: Cuenta(nuevoId(), nombre.trim(), emoji, orden)).copy(nombre = nombre.trim(), emoji = emoji, activa = activa))
+                alGuardar((inicial ?: Cuenta(nuevoId(), nombre.trim(), emoji, orden)).copy(nombre = nombre.trim(), emoji = emoji, activa = activa, tipo = tipo))
             }) { Text("Guardar") }
         }
     }

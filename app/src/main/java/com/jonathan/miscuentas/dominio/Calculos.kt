@@ -43,8 +43,9 @@ object Calculos {
 
     // regla 3.4
     // los ajustes de los cuadres cuentan; los envios entre cuentas se anulan solos
+    // las compras con tarjeta no sacan plata de ninguna cuenta
     fun deberiaTener(datos: Datos): Long =
-        datos.config.plataInicial + datos.ingresos.sumOf { it.monto } - datos.movimientos.sumOf { it.monto } +
+        datos.config.plataInicial + datos.ingresos.sumOf { it.monto } - datos.movimientos.filter { it.tarjetaId == null }.sumOf { it.monto } +
             datos.cuentaMovs.filter { it.tipo != TipoCuentaMov.CUADRE }.sumOf { it.monto }
 
     // pagos que bajan una deuda
@@ -60,13 +61,33 @@ object Calculos {
         if (deuda.saldoExtracto != null && fe != null) extractos += fe to deuda.saldoExtracto
         val ultimo = extractos.filter { it.first <= hoy }.maxByOrNull { it.first }
         val pagos = pagosDeuda(deuda, datos.movimientos)
+        // las compras con la tarjeta de esta deuda la suben; las del mismo dia del extracto cuentan
+        val compras = Tarjetas.compras(datos, deuda.id)
         return if (ultimo != null) {
             val despues = pagos.filter { (Fechas.leer(it.fecha) ?: inicio) > ultimo.first }.sumOf { it.monto }
-            maxOf(0, ultimo.second - despues)
+            val nuevas = compras.filter { (Fechas.leer(it.fecha) ?: inicio) >= ultimo.first }.sumOf { it.monto }
+            maxOf(0, ultimo.second + nuevas - despues)
         } else {
             val despues = pagos.filter { (Fechas.leer(it.fecha) ?: inicio) >= inicio }.sumOf { it.monto }
-            maxOf(0, deuda.saldoInicial - despues)
+            val nuevas = compras.filter { (Fechas.leer(it.fecha) ?: inicio) >= inicio }.sumOf { it.monto }
+            maxOf(0, deuda.saldoInicial + nuevas - despues)
         }
+    }
+
+    // 11.1: el extracto crece con la tasa mensual por cada mes que pasa, menos los pagos y mas las compras
+    fun saldoConIntereses(deuda: Deuda, datos: Datos, hoy: LocalDate): Long? {
+        if (!deuda.generaIntereses) return null
+        val tm = tasaMensual(deuda.tasaEa) ?: return null
+        val extractos = datos.deudaSaldos.filter { it.deudaId == deuda.id }.mapNotNull { s -> Fechas.leer(s.fecha)?.let { it to s.saldo } }.toMutableList()
+        val fe = Fechas.leer(deuda.fechaSaldoExtracto)
+        if (deuda.saldoExtracto != null && fe != null) extractos += fe to deuda.saldoExtracto
+        val inicio = Fechas.leer(datos.config.fechaInicio) ?: hoy
+        val (desde, saldo) = extractos.filter { it.first <= hoy }.maxByOrNull { it.first } ?: (inicio to deuda.saldoInicial)
+        val meses = java.time.temporal.ChronoUnit.MONTHS.between(desde, hoy).toInt()
+        if (meses <= 0) return null
+        val pagos = pagosDeuda(deuda, datos.movimientos).filter { (Fechas.leer(it.fecha) ?: inicio) > desde }.sumOf { it.monto }
+        val compras = Tarjetas.compras(datos, deuda.id).filter { (Fechas.leer(it.fecha) ?: inicio) >= desde }.sumOf { it.monto }
+        return maxOf(0, (saldo * (1 + tm).pow(meses)).roundToLong() - pagos + compras)
     }
 
     // regla 3.6

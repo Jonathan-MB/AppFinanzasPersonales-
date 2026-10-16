@@ -28,12 +28,16 @@ import java.time.YearMonth
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun PantallaRegistrar(vm: AppViewModel, datos: Datos, irGasto: () -> Unit, irIngreso: () -> Unit, irMonto: () -> Unit, irDeudas: () -> Unit, irDetalle: (Obligacion) -> Unit) {
+fun PantallaRegistrar(
+    vm: AppViewModel, datos: Datos, irGasto: () -> Unit, irIngreso: () -> Unit, irMonto: () -> Unit, irDeudas: () -> Unit, irDetalle: (Obligacion) -> Unit,
+    irPosponer: () -> Unit, irPuente: () -> Unit, irSueldo: () -> Unit,
+) {
     val hoy = vm.hoy()
+    val proy = remember(datos) { Proyecciones.calcular(datos, hoy) }
     val mes = YearMonth.from(hoy)
     fun enMes(f: String) = Fechas.leer(f)?.let { YearMonth.from(it) == mes } ?: false
     val entroMes = datos.ingresos.filter { enMes(it.fecha) }.sumOf { it.monto }
-    val salioMes = datos.movimientos.filter { enMes(it.fecha) }.sumOf { it.monto }
+    val salioMes = datos.movimientos.filter { enMes(it.fecha) && it.tarjetaId == null }.sumOf { it.monto }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Text("Hola 👋", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -41,6 +45,12 @@ fun PantallaRegistrar(vm: AppViewModel, datos: Datos, irGasto: () -> Unit, irIng
 
         // control de la plata
         TarjetaPlata(vm, datos, irDeudas)
+        Spacer(Modifier.height(10.dp))
+        TarjetaProyeccion(datos, proy, hoy, irPosponer, irPuente) {
+            val moto = datos.categorias.firstOrNull { it.tipo == TipoEtiqueta.INGRESO && it.nombre == "Moto" } ?: Categoria("et-moto", "Moto", false, "🏍", TipoEtiqueta.INGRESO)
+            vm.seleccion = Seleccion.IngresoEtiqueta(moto); irMonto()
+        }
+        TarjetasDelPlan(vm, datos, proy, hoy, irSueldo, completo = false)
 
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -97,7 +107,7 @@ fun FilaPago(o: Obligacion, hoy: LocalDate, onClick: () -> Unit) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(o.concepto, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("${Formato.diaSemana(o.fecha)} ${Formato.fechaCorta(o.fecha)} · ${o.categoria}", fontSize = 12.sp)
+                Text("${Formato.diaSemana(o.fecha)} ${Formato.fechaCorta(o.fecha)} · ${o.categoria}" + (o.fechaOriginal?.let { " · pospuesto del ${Formato.fechaCorta(it)}" } ?: ""), fontSize = 12.sp)
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text(Formato.pesos(o.falta), fontWeight = FontWeight.Bold)
@@ -293,12 +303,22 @@ fun PantallaMonto(vm: AppViewModel, datos: Datos, alVolver: () -> Unit, alGuarda
     // evita guardar dos veces con doble toque
     var guardado by remember { mutableStateOf(false) }
     var cuenta by remember { mutableStateOf(Saldos.porDefecto(datos)) }
+    // con que se pago: una cuenta o una tarjeta (puente)
+    val preferida = datos.tarjetas.firstOrNull { it.preferidaPuente && it.usoPermitido }
+    var tarjetaId by remember { mutableStateOf(if (vm.usarPuente && !esIngreso) preferida?.id else null).also { vm.usarPuente = false } }
+    val tarjeta = Tarjetas.de(datos, tarjetaId)
+    var cuotas by remember(tarjetaId) { mutableStateOf(tarjeta?.let { Tarjetas.cuotasSugeridas(it) } ?: 1) }
+    var fechaPuente by remember(tarjetaId) { mutableStateOf<LocalDate?>(Tarjetas.proximoSueldo(datos, vm.hoy())) }
+    var entiendo by remember(tarjetaId) { mutableStateOf(false) }
+    var seguro by remember(tarjetaId) { mutableStateOf(false) }
+    val hoy = vm.hoy()
+    val proy = remember(datos) { Proyecciones.calcular(datos, hoy) }
     val foco = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { foco.requestFocus() } }
 
     Column(Modifier.fillMaxSize()) {
         Encabezado(if (esIngreso) "Nuevo ingreso" else "Nuevo gasto", alVolver)
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(emoji, fontSize = 34.sp)
                 Spacer(Modifier.width(10.dp))
@@ -316,8 +336,18 @@ fun PantallaMonto(vm: AppViewModel, datos: Datos, alVolver: () -> Unit, alGuarda
                     }
                 }
             }
+            val presupuestoReal = (sel as? Seleccion.Etiqueta)?.etiqueta?.presupuestoId?.let { Proyecciones.presupuestoReal(datos, it, hoy, proy) }
             Spacer(Modifier.height(10.dp))
             CampoPesos("¿Cuánto fue?", monto, { monto = it }, Modifier.focusRequester(foco), grande = true)
+            presupuestoReal?.let { r ->
+                Text("Te quedan ${Formato.pesos(r.realDisponible)} reales para esto" + if (r.noAlcanza) " (el presupuesto dice ${Formato.pesos(r.restante)})" else "",
+                    fontSize = 13.sp, fontWeight = FontWeight.Bold, color = if (r.noAlcanza) Colores.rojo else Colores.verde)
+            }
+            if (sel is Seleccion.Pago && tarjeta == null) {
+                Proyecciones.avisoAnticipado(datos, sel.obligacion, monto ?: 0, hoy, proy)?.let {
+                    Text("⚠ $it", fontSize = 13.sp, color = Colores.amarillo, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
+                }
+            }
             if (esRecibo) {
                 Text("¿Cómo quedó este pago?", fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
                 SelectorChips(listOf("si" to "✓ Pago completo", "no" to "Es un abono"), if (completo) "si" else "no") { completo = it == "si" }
@@ -327,18 +357,27 @@ fun PantallaMonto(vm: AppViewModel, datos: Datos, alVolver: () -> Unit, alGuarda
                     fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            SelectorCuenta(datos, if (esIngreso) "¿A qué cuenta entró?" else "¿De dónde salió?", cuenta) { cuenta = it }
+            if (esIngreso) SelectorCuenta(datos, "¿A qué cuenta entró?", cuenta) { cuenta = it }
+            else SelectorMedio(datos, cuenta, tarjetaId) { c, t -> cuenta = c ?: cuenta; tarjetaId = t }
+            if (tarjeta != null) DetalleTarjeta(datos, tarjeta, monto ?: 0, cuotas, { cuotas = it }, fechaPuente, { fechaPuente = it }, entiendo, { entiendo = it }, seguro, { seguro = it })
             CampoFecha("Fecha", fecha, { fecha = it })
             CampoTexto("Nota (opcional)", nota, { nota = it })
-            Spacer(Modifier.height(16.dp))
+        }
+        // guardar queda fijo abajo, encima del teclado
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
             Button(
-                enabled = (monto ?: 0) > 0 && fecha != null && !guardado,
+                enabled = (monto ?: 0) > 0 && fecha != null && !guardado && (tarjeta == null || tarjeta.usoPermitido || (entiendo && seguro)) && (tarjeta == null || cuotas > 1 || fechaPuente != null),
                 onClick = {
                     if (guardado) return@Button
                     val m = monto ?: return@Button
                     val f = fecha ?: return@Button
                     guardado = true
-                    if (esIngreso) vm.registrarIngreso(sel, m, f, nota, cuenta) else vm.registrarGasto(sel, m, f, nota, esRecibo && completo, cuenta)
+                    if (esIngreso) vm.registrarIngreso(sel, m, f, nota, cuenta)
+                    else {
+                        // el uso de una tarjeta bloqueada queda anotado en el historial
+                        val notaFinal = if (tarjeta != null && !tarjeta.usoPermitido) (nota + " (usó tarjeta bloqueada)").trim() else nota
+                        vm.registrarGasto(sel, m, f, notaFinal, (esRecibo || tarjeta != null) && completo, cuenta, tarjeta?.id, if (tarjeta != null) cuotas else null, fechaPuente)
+                    }
                     vm.seleccion = null
                     alGuardar((if (esIngreso) "Ingreso" else "Gasto") + " guardado: ${Formato.pesos(m)} · $titulo")
                 },

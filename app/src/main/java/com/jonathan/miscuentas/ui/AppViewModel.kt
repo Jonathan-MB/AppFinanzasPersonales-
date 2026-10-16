@@ -34,6 +34,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     var seleccion: Seleccion? = null
 
+    // el siguiente gasto propone la tarjeta preferida para puente
+    var usarPuente = false
+
+    // despues de guardar un sueldo se abre la pantalla de llego el sueldo
+    var abrirSueldo = false
+
     fun hoy(): LocalDate = LocalDate.now()
 
     init {
@@ -53,7 +59,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun borrar(v: Any) = viewModelScope.launch { repo.borrar(v) }
 
     // arma el movimiento segun lo que se toco
-    fun registrarGasto(sel: Seleccion, monto: Long, fecha: LocalDate, nota: String, completo: Boolean = false, cuentaId: String? = null) = viewModelScope.launch {
+    // con tarjeta: no sale de ninguna cuenta y deja el puente para pagarlo despues
+    fun registrarGasto(
+        sel: Seleccion, monto: Long, fecha: LocalDate, nota: String, completo: Boolean = false, cuentaId: String? = null,
+        tarjetaId: String? = null, cuotas: Int? = null, fechaPagoPuente: LocalDate? = null,
+    ) = viewModelScope.launch {
         val d = datos.value ?: return@launch
         val iso = Fechas.iso(fecha)
         var claveRevisar: Obligacion? = null
@@ -78,14 +88,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
             else -> return@launch
         }
-        repo.guardar(mov.copy(cuentaId = cuentaId ?: Saldos.porDefecto(d)))
+        repo.guardar(
+            if (tarjetaId != null) mov.copy(cuentaId = null, tarjetaId = tarjetaId, cuotas = cuotas ?: 1,
+                fechaPagoPuente = if ((cuotas ?: 1) <= 1) fechaPagoPuente?.let { Fechas.iso(it) } else null,
+                // pagar con tarjeta no baja la deuda que se esta pagando
+                deudaId = if (mov.tipo == TipoMovimiento.ABONO_EXTRA) mov.deudaId else null)
+            else mov.copy(cuentaId = cuentaId ?: Saldos.porDefecto(d))
+        )
         claveRevisar?.let { antes ->
             val despues = antes.copy(pagado = antes.pagado + monto)
             Avisos.revisarPresupuesto(getApplication(), antes, despues)
         }
     }
 
-    fun registrarIngreso(sel: Seleccion, monto: Long, fecha: LocalDate, nota: String, cuentaId: String? = null) = viewModelScope.launch {
+    fun registrarIngreso(sel: Seleccion, monto: Long, fecha: LocalDate, nota: String, cuentaId: String? = null) {
+        // se marca antes de guardar para que al volver se abra la pantalla del sueldo
+        val tipo = when (sel) {
+            is Seleccion.IngresoEsperadoSel -> sel.esperado.tipo
+            is Seleccion.IngresoEtiqueta -> Semilla.tipoIngreso(sel.etiqueta.nombre)
+            else -> null
+        }
+        if (tipo == TipoIngreso.SALARIO) abrirSueldo = true
+        guardarIngreso(sel, monto, fecha, nota, cuentaId)
+    }
+
+    private fun guardarIngreso(sel: Seleccion, monto: Long, fecha: LocalDate, nota: String, cuentaId: String?) = viewModelScope.launch {
         val d = datos.value ?: return@launch
         val iso = Fechas.iso(fecha)
         val ingreso = when (sel) {
@@ -114,6 +141,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val total = reales.values.sum()
         repo.guardar(Saldos.cuadrar(d, reales, Fechas.iso(hoy())))
         repo.guardar(d.config.copy(saldoReal = total, fechaSaldoReal = Fechas.iso(hoy())))
+    }
+
+    // mueve un pago a otra fecha; si la fecha es la original se quita el pospuesto
+    fun posponer(clave: String, fecha: LocalDate, nota: String) = viewModelScope.launch {
+        val original = Fechas.leer(clave.substringAfterLast(':'))
+        val actual = datos.value?.pospuestos?.firstOrNull { it.clave == clave }
+        if (original == fecha) actual?.let { repo.borrar(it) }
+        else repo.guardar(Pospuesto(clave, Fechas.iso(fecha), nota, actual?.createdAt ?: ""))
+    }
+
+    fun pausar(tipo: String, id: String, desde: LocalDate, hasta: LocalDate, nota: String) = viewModelScope.launch {
+        repo.guardar(Pausa(nuevoId(), tipo, id, Fechas.iso(desde), Fechas.iso(hasta), nota))
+    }
+
+    // aparta plata de una cuenta al bolsillo o al colchon
+    fun apartar(hacia: String, monto: Long) = viewModelScope.launch {
+        val d = datos.value ?: return@launch
+        val desde = Saldos.porDefecto(d)?.takeIf { it != hacia } ?: Saldos.principal(d) ?: return@launch
+        if (desde == hacia) return@launch
+        repo.guardar(Saldos.trasladar(desde, hacia, monto, Fechas.iso(hoy()), "apartado"))
     }
 
     // envio entre cuentas o retiro, no cambia el total

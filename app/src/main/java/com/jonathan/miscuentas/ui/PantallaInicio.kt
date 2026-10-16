@@ -6,6 +6,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -15,8 +16,12 @@ import com.jonathan.miscuentas.dominio.*
 import java.time.YearMonth
 
 @Composable
-fun PantallaInicio(vm: AppViewModel, datos: Datos, irMonto: () -> Unit, irDeudas: () -> Unit, irCalendario: () -> Unit, irDetalle: (Obligacion) -> Unit) {
+fun PantallaInicio(
+    vm: AppViewModel, datos: Datos, irMonto: () -> Unit, irDeudas: () -> Unit, irCalendario: () -> Unit, irDetalle: (Obligacion) -> Unit,
+    irPosponer: () -> Unit, irPuente: () -> Unit, irMoto: () -> Unit, irSueldo: () -> Unit, irPresupuesto: (String) -> Unit,
+) {
     val hoy = vm.hoy()
+    val proy = remember(datos) { Proyecciones.calcular(datos, hoy) }
     val mes = YearMonth.from(hoy)
     fun enMes(f: String) = Fechas.leer(f)?.let { YearMonth.from(it) == mes } ?: false
     val todas = Obligaciones.generar(datos, mes.minusMonths(3).atDay(1), mes.plusMonths(2).atEndOfMonth())
@@ -29,6 +34,10 @@ fun PantallaInicio(vm: AppViewModel, datos: Datos, irMonto: () -> Unit, irDeudas
     val avance = Calculos.avance(delMes.filter { it.fecha <= hoy || it.pagado > 0 }.ifEmpty { delMes })
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        // lo primero: si la plata alcanza hasta el proximo sueldo
+        TarjetaProyeccion(datos, proy, hoy, irPosponer, irPuente, irMoto)
+        TarjetasDelPlan(vm, datos, proy, hoy, irSueldo)
+        Spacer(Modifier.height(10.dp))
         Tarjeta(color = MaterialTheme.colorScheme.primaryContainer) {
             Text("Deberías tener hoy", color = MaterialTheme.colorScheme.onPrimaryContainer)
             Text(Formato.pesos(Calculos.deberiaTener(datos)), fontSize = 30.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
@@ -51,18 +60,11 @@ fun PantallaInicio(vm: AppViewModel, datos: Datos, irMonto: () -> Unit, irDeudas
 
         SeccionQuincena(vm, datos, irMonto, irDetalle)
 
-        // presupuestos de esta quincena
-        val presupuestos = datos.presupuestos.filter { it.activo }.mapNotNull { Obligaciones.instanciaPresupuesto(datos, it.id, hoy) }
+        // presupuestos vigentes con lo que de verdad alcanza
+        val presupuestos = datos.presupuestos.filter { it.activo }.mapNotNull { Proyecciones.presupuestoReal(datos, it.id, hoy, proy) }
         if (presupuestos.isNotEmpty()) {
             TituloSeccion("Presupuestos")
-            presupuestos.forEach { p ->
-                Tarjeta(Modifier.padding(vertical = 3.dp)) {
-                    Text("${p.concepto}: ${Formato.pesos(p.pagado)} de ${Formato.pesos(p.presupuestado)}", fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(6.dp))
-                    BarraProgreso(p.pagado, p.presupuestado)
-                    if (p.pagado > p.presupuestado) Text("Te pasaste por ${Formato.pesos(p.pagado - p.presupuestado)}", color = Colores.rojo, fontSize = 13.sp)
-                }
-            }
+            presupuestos.forEach { r -> TarjetaPresupuesto(r, proy) { irPresupuesto(r.obligacion.origenId) } }
         }
 
         SeccionProximaQuincena(vm, datos, irMonto)

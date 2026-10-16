@@ -110,7 +110,7 @@ fun FilaObligacion(o: Obligacion, hoy: LocalDate, onClick: () -> Unit) {
                 Text(o.concepto, Modifier.weight(1f), fontWeight = FontWeight.Bold)
                 ChipEstado(o.estado(hoy))
             }
-            Text(o.categoria + (o.aviso?.let { " · ⚠ $it" } ?: ""), fontSize = 12.sp, color = if (o.aviso != null) Colores.amarillo else MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(o.categoria + (o.aviso?.let { " · ⚠ $it" } ?: "") + (o.fechaOriginal?.let { " · pospuesto del ${Formato.fechaCorta(it)}" } ?: ""), fontSize = 12.sp, color = if (o.aviso != null) Colores.amarillo else MaterialTheme.colorScheme.onSurfaceVariant)
             Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
                 Text("Presup. ${Formato.pesos(o.presupuestado)}", Modifier.weight(1f), fontSize = 12.sp)
                 Text("Pagado ${Formato.pesos(o.pagado)}", Modifier.weight(1f), fontSize = 12.sp)
@@ -182,7 +182,8 @@ fun PantallaDetalleObligacion(vm: AppViewModel, datos: Datos, clave: String, alV
     val hoy = vm.hoy()
     val partes = clave.split(':')
     val fecha = Fechas.leer(partes.getOrNull(2)) ?: hoy
-    val o = Obligaciones.generar(datos, YearMonth.from(fecha).atDay(1), YearMonth.from(fecha).atEndOfMonth()).firstOrNull { it.clave == clave }
+    // un pospuesto puede haber pasado a otro mes: se busca un poco mas adelante
+    val o = Obligaciones.generar(datos, YearMonth.from(fecha).atDay(1), YearMonth.from(fecha).plusMonths(3).atEndOfMonth()).firstOrNull { it.clave == clave }
         ?: Obligaciones.generar(datos, YearMonth.from(fecha).atDay(1), YearMonth.from(fecha).atEndOfMonth())
             .firstOrNull { it.tipoOrigen == partes.getOrNull(0) && it.origenId == partes.getOrNull(1) }
     val confirmar = LocalConfirmador.current
@@ -200,11 +201,32 @@ fun PantallaDetalleObligacion(vm: AppViewModel, datos: Datos, clave: String, alV
                 FilaDato("Pagado", Formato.pesos(o.pagado), Colores.verde)
                 FilaDato("Falta", Formato.pesos(o.falta), negrita = true)
                 o.aviso?.let { Text("⚠ $it", color = Colores.amarillo, fontSize = 13.sp) }
+                o.fechaOriginal?.let { Text("Pospuesto del ${Formato.fecha(Fechas.iso(it))}", color = Colores.azul, fontSize = 13.sp) }
             }
             Spacer(Modifier.height(12.dp))
             Button(onClick = { vm.seleccion = Seleccion.Pago(o); irMonto() }, Modifier.fillMaxWidth().height(52.dp)) { Text("Registrar pago") }
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = { irEditar(o.tipoOrigen, o.origenId) }, Modifier.fillMaxWidth()) {
+            if (o.falta > 0) {
+                var moviendo by remember { mutableStateOf(false) }
+                var nueva by remember { mutableStateOf<LocalDate?>(Tarjetas.proximoSueldo(datos, hoy)) }
+                if (!moviendo) OutlinedButton(onClick = { moviendo = true }, Modifier.fillMaxWidth()) { Text("📆 Posponer") }
+                else {
+                    CampoFecha("Nueva fecha", nueva, { nueva = it }, atajos = false)
+                    Row {
+                        TextButton(onClick = { moviendo = false }) { Text("Cancelar") }
+                        Spacer(Modifier.weight(1f))
+                        Button(enabled = nueva != null, onClick = { vm.posponer(o.clave, nueva!!, ""); alVolver() }) { Text("Posponer") }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+            if (o.fechaOriginal != null) {
+                OutlinedButton(onClick = { datos.pospuestos.firstOrNull { it.clave == o.clave }?.let { vm.borrar(it) }; alVolver() }, Modifier.fillMaxWidth()) {
+                    Text("Volver a la fecha original")
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+            if (o.tipoOrigen != Origen.PUENTE) OutlinedButton(onClick = { irEditar(o.tipoOrigen, o.origenId) }, Modifier.fillMaxWidth()) {
                 Text(
                     when (o.tipoOrigen) {
                         Origen.DEUDA -> "Editar deuda"

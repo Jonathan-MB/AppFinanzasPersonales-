@@ -21,6 +21,12 @@ data class Config(
     val ultimoRespaldo: String? = null,
     val createdAt: String = "",
     val updatedAt: String = "",
+    // colchon de emergencia y bolsillo que aparta plata de un sueldo para el otro
+    val metaColchon: Long = 0,
+    val colchonCuenta: String? = null,
+    val bolsilloCuenta: String? = null,
+    val bolsilloMonto: Long = 0,
+    val bolsilloDia: Int? = null,
 )
 
 @Entity(tableName = "deudas")
@@ -102,6 +108,8 @@ data class IngresoProgramado(
     val notas: String = "",
     val createdAt: String = "",
     val updatedAt: String = "",
+    // puede no llegar (la moto siempre); no cuenta en la proyeccion
+    val esIncierto: Boolean = false,
 )
 
 @Entity(tableName = "eventos")
@@ -133,6 +141,11 @@ data class Movimiento(
     val liquida: Boolean = false,
     // de que cuenta salio; vacio es la cuenta principal
     val cuentaId: String? = null,
+    // compra con tarjeta: no sale plata de ninguna cuenta, sube la deuda de la tarjeta
+    val tarjetaId: String? = null,
+    val cuotas: Int? = null,
+    // a 1 cuota, cuando se piensa pagar
+    val fechaPagoPuente: String? = null,
 )
 
 @Entity(tableName = "ingresos")
@@ -159,7 +172,17 @@ data class Cuenta(
     val activa: Boolean = true,
     val createdAt: String = "",
     val updatedAt: String = "",
+    val tipo: String = TipoCuenta.NORMAL,
 )
+
+object TipoCuenta {
+    const val NORMAL = "normal"
+    // plata apartada para la otra quincena
+    const val BOLSILLO = "bolsillo"
+    // plata de emergencia, no cuenta como libre
+    const val COLCHON = "colchon"
+    val todos = listOf(NORMAL, BOLSILLO, COLCHON)
+}
 
 // plata que se mueve sin ser gasto ni ingreso: envios entre cuentas, retiros y ajustes al cuadrar
 @Entity(tableName = "cuenta_movs")
@@ -172,6 +195,53 @@ data class CuentaMov(
     val tipo: String,
     // las filas de un mismo envio o de un mismo cuadre
     val grupo: String? = null,
+    val nota: String = "",
+    val createdAt: String = "",
+    val updatedAt: String = "",
+)
+
+// tarjeta de credito o cupo; su saldo es el de la deuda deudaId
+@Entity(tableName = "tarjetas")
+data class Tarjeta(
+    @PrimaryKey val id: String,
+    val deudaId: String? = null,
+    val nombre: String,
+    val cupoTotal: Long? = null,
+    // ultimo cupo que se vio en el banco
+    val cupoDisponible: Long? = null,
+    val fechaCupo: String? = null,
+    // cobra interes aunque sea a 1 cuota
+    val interes1Cuota: Boolean = true,
+    val cuotasPorDefecto: Int? = null,
+    // false: bloqueada en el plan, pide doble confirmacion
+    val usoPermitido: Boolean = true,
+    val soloTiendas: Boolean = false,
+    // la que se usa para llegar a fin de quincena
+    val preferidaPuente: Boolean = false,
+    val diaCorte: Int? = null,
+    val notas: String = "",
+    val createdAt: String = "",
+    val updatedAt: String = "",
+)
+
+// un gasto fijo, presupuesto o deuda que no se genera entre desde y hasta
+@Entity(tableName = "pausas")
+data class Pausa(
+    @PrimaryKey val id: String,
+    val tipoOrigen: String,
+    val origenId: String,
+    val desde: String,
+    val hasta: String,
+    val nota: String = "",
+    val createdAt: String = "",
+    val updatedAt: String = "",
+)
+
+// un pago movido a otra fecha; conserva su clave
+@Entity(tableName = "pospuestos")
+data class Pospuesto(
+    @PrimaryKey val clave: String,
+    val fechaNueva: String,
     val nota: String = "",
     val createdAt: String = "",
     val updatedAt: String = "",
@@ -218,6 +288,9 @@ data class Datos(
     val categorias: List<Categoria> = emptyList(),
     val cuentas: List<Cuenta> = emptyList(),
     val cuentaMovs: List<CuentaMov> = emptyList(),
+    val tarjetas: List<Tarjeta> = emptyList(),
+    val pausas: List<Pausa> = emptyList(),
+    val pospuestos: List<Pospuesto> = emptyList(),
 )
 
 object TipoDeuda {

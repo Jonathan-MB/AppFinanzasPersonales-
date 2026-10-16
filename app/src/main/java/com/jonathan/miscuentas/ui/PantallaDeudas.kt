@@ -65,6 +65,7 @@ fun PantallaDeudas(vm: AppViewModel, datos: Datos, alVolver: (() -> Unit)?, irDe
                         )
                     }
                     e.interesMes?.takeIf { it > 0 }?.let { Text("Interés aprox. del mes: ${Formato.pesos(it)}", fontSize = 12.sp) }
+                    datos.tarjetas.filter { it.deudaId == d.id }.forEach { t -> FilaCupo(datos, t, hoy) }
                     if (e.noBaja) Text("⚠ Con esta cuota la deuda no baja", color = Colores.rojo, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
             }
@@ -91,6 +92,8 @@ fun PantallaDetalleDeuda(vm: AppViewModel, datos: Datos, id: String, alVolver: (
                 Text("Saldo estimado", fontSize = 13.sp)
                 Text(Formato.pesos(e.saldoEstimado), fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Colores.rojo)
                 Text(AVISO_ESTIMADO, fontSize = 11.sp)
+                Calculos.saldoConIntereses(d, datos, hoy)?.let { Text("Estimado con intereses: ${Formato.pesos(it)}", fontSize = 13.sp, color = Colores.rojo) }
+                datos.tarjetas.filter { it.deudaId == d.id }.forEach { t -> FilaCupo(datos, t, hoy) }
                 Spacer(Modifier.height(8.dp))
                 FilaDato("Entidad", d.entidad.ifBlank { "—" })
                 FilaDato("Tipo", d.tipo)

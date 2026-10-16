@@ -101,6 +101,39 @@ object Avisos {
             notificar(context, 12, "Tienes ${vencidos.size} pagos vencidos",
                 vencidos.joinToString("\n") { "${it.concepto}: ${Formato.pesos(it.falta)} (${Formato.fecha(Fechas.iso(it.fecha))})" })
         }
+        revisarPlan(context, datos, hoy)
+    }
+
+    // faltante hasta el sueldo, puentes y bolsillo el dia del sueldo, y cupos casi llenos
+    private fun revisarPlan(context: Context, datos: Datos, hoy: LocalDate) {
+        val prefs = context.getSharedPreferences("avisos", Context.MODE_PRIVATE)
+        val proy = Proyecciones.calcular(datos, hoy)
+        val per = Obligaciones.periodo(datos, hoy)
+        // 13: solo si cambio el faltante o es el primero del periodo
+        val falta = proy.faltanteHastaSueldo
+        val clavePer = Fechas.iso(per.desde)
+        if (falta > 0 && (prefs.getLong("faltante", -1) != falta || prefs.getString("periodo", null) != clavePer)) {
+            notificar(context, 13, "Te faltan ${Formato.pesos(falta)} para llegar al ${proy.proximoSueldo.dayOfMonth}", "Revisa la app: puedes posponer un pago, usar la tarjeta de puente o hacer moto.")
+        }
+        prefs.edit().putLong("faltante", falta).putString("periodo", clavePer).apply()
+        if (per.desde == hoy) {
+            // 14: puentes que vencen antes del siguiente sueldo
+            val puentes = Obligaciones.pagosQuincena(datos, hoy).filter { it.tipoOrigen == Origen.PUENTE && it.falta > 0 }
+            if (puentes.isNotEmpty()) {
+                notificar(context, 14, "Paga hoy ${Formato.pesos(puentes.sumOf { it.falta })} de puentes de tarjeta",
+                    puentes.joinToString("\n") { "${it.concepto}: ${Formato.pesos(it.falta)}" })
+            }
+            // 15: apartar el bolsillo con el sueldo que lo alimenta
+            val c = datos.config
+            if (c.bolsilloDia != null && per.diaSueldo == c.bolsilloDia && c.bolsilloMonto > 0 && c.bolsilloCuenta != null) {
+                notificar(context, 15, "Aparta ${Formato.pesos(c.bolsilloMonto)} al bolsillo", "Es para la quincena siguiente. Ábrelo en la app con un toque.")
+            }
+        }
+        // 17: cupo usado mas del 90 %
+        val llenas = datos.tarjetas.filter { (Tarjetas.uso(datos, it, hoy) ?: 0.0) > 0.9 }
+        if (llenas.isNotEmpty()) {
+            notificar(context, 17, "Cupo casi lleno", llenas.joinToString("\n") { "${it.nombre}: ${Formato.porcentaje(Tarjetas.uso(datos, it, hoy) ?: 0.0)} usado" })
+        }
     }
 
     // aviso cuando un presupuesto pasa del 80 y del 100

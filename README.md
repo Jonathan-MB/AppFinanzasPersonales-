@@ -7,6 +7,11 @@ Al abrir la app lo primero es elegir **Gasto** o **Ingreso**, tocar una etiqueta
 ## Qué hace
 
 - **Registrar:** gasto o ingreso en dos toques con etiquetas. Se pueden crear etiquetas nuevas y conectarlas a un presupuesto.
+- **¿Llegas al sueldo?:** proyección día a día hasta el próximo sueldo. En verde dice cuánto queda libre y cuánto puedes gastar por día; en rojo, cuánto falta y qué hacer (posponer un pago, usar una tarjeta de puente o hacer moto). La moto se muestra aparte, como ingreso incierto.
+- **Tarjetas y puentes:** cupo, cuotas, interés y cuáles están bloqueadas. Comprar con tarjeta no saca plata de tus cuentas: sube la deuda y deja el pago para después.
+- **Pausas y pospuestos:** pausar un gasto fijo o presupuesto unos meses, o mover un pago a otra fecha sin perder lo abonado.
+- **Bolsillo y colchón:** apartar plata de un sueldo para la quincena siguiente, y un colchón de emergencia que no cuenta como libre.
+- **Llegó el sueldo:** lista de lo que hay que hacer, en orden, el día que entra el sueldo.
 - **Control de la plata:** "Deberías tener hoy" = plata inicial + lo que entró − lo que salió, repartido en cuentas (Davivienda, Nequi, efectivo y las que se agreguen). Cada gasto o ingreso dice de qué cuenta salió o a cuál entró.
 - **Cuadrar y mover plata:** al cuadrar se escribe cuánto hay de verdad en cada cuenta, se ve el desfase (de menos o de más) y todo queda igual a lo real. Los envíos entre cuentas y los retiros no cambian el total.
 - **Pagos variables:** al pagar un recibo (luz, agua, gas, tarjeta) se puede cambiar el valor. Con **Pago completo** queda pagado aunque sea otro monto; con **Es un abono** queda debiendo lo que falta.

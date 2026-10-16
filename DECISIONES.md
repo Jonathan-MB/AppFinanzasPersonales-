@@ -75,3 +75,24 @@ Lo que se decidió sin estar definido en el documento original.
 - Un día de la semana fuera de 0 a 6 (por ejemplo en un TXT editado a mano) se ajusta en vez de colgar la app.
 - El botón Guardar del monto se bloquea después del primer toque para no registrar dos veces.
 - La hora del aviso acepta `7:00` o `07:00`. Semanas por mes tiene que ser mayor que 0.
+
+## Versión de datos 4 (proyección, tarjetas, pausas, bolsillo)
+- Proyección: arranca con lo que deberías tener menos el colchón. Suma los ingresos esperados que no son inciertos (los estimados como la prima entran, pero marcados) y resta los pagos con su fecha efectiva, lo vencido el día de hoy y los presupuestos. Lo que falta del presupuesto vigente se reparte en partes iguales hasta el fin de su periodo, sin perder pesos por redondeo. El horizonte llega al día anterior al segundo sueldo.
+- Un sueldo esperado que ya pasó y no se registró no entra en la proyección: se asume que hay que registrarlo.
+- Presupuesto quincenal con dos sueldos fijos: el periodo va de un sueldo al siguiente (del 15 al 29 y del 30 al 14), igual que los pagos. La instancia lleva la fecha del día del sueldo.
+- "Real disponible" de un presupuesto = lo que queda menos el faltante. La especificación decía min(restante, libre), pero la proyección ya descuenta el presupuesto y con esa fórmula se habría contado dos veces.
+- Ingresos inciertos: la moto siempre lo es, al importar y al editar. No entran en la proyección; se muestran aparte como "Con moto: llegas con $X" y con una línea punteada en la gráfica.
+- Compra con tarjeta: el movimiento lleva tarjetaId y no baja ninguna cuenta ni lo que deberías tener. Sube el saldo de la deuda (las compras del mismo día del extracto cuentan) y crea pagos "puente". Si la compra paga un pago programado (por ejemplo, los perros), ese pago queda saldado. En el historial no suma al total de gastos, porque lo que suma es el pago del puente cuando sale plata.
+- Puentes: a 1 cuota, uno en la fecha elegida (por defecto el próximo sueldo); a N cuotas, N pagos mensuales en el día de pago de la deuda, empezando después de la compra, con la cuota de la regla 3.8. A 1 cuota se cobra interés solo si la tarjeta lo cobra.
+- Cupo disponible: el reportado si es más nuevo que el último pago o compra; si no, el cupo total menos el saldo. Sin cupo total, el reportado menos las compras más los pagos posteriores.
+- Una tarjeta bloqueada pide dos confirmaciones ("entiendo lo que cuesta" y "sí, quiero usarla"). Usarla igual deja "(usó tarjeta bloqueada)" en la nota, que es el aviso 16 en el historial. Si además es solo de tiendas, el mensaje dice las dos cosas.
+- Pausas: se aplican sobre la fecha original del pago. Pospuestos: conservan la clave y los pagos ligados, cambian la fecha y el estado se calcula con la fecha nueva. Pueden traer al rango un pago de otro mes.
+- Bolsillo: se propone apartarlo cuando ya llegó el sueldo del día configurado y aún no hay traslado a esa cuenta en el periodo. Sale de la última cuenta normal usada. El colchón no cuenta como libre en la proyección.
+- La cuenta que se propone al registrar es la última normal usada: nunca el bolsillo ni el colchón.
+- Abono sugerido: solo sin faltante. Primero completa el colchón; con el colchón completo, lo libre redondeado a miles va a la primera deuda del plan de ataque.
+- Aviso de pago anticipado: cuando lo que se paga vence en el periodo del siguiente sueldo.
+- Aviso 13: se repite solo si cambia el faltante o empieza otro periodo (se guarda en las preferencias del celular). Los avisos 14 y 15 salen el día del sueldo.
+- "Actualizar desde la app" toma ahora deudas, extractos, gastos fijos, presupuestos, ingresos programados, eventos, tarjetas, pausas, pospuestos, cuentas (por id, sin borrar las que solo están en la app) y la configuración del plan (avisos, plan, bolsillo y colchón). No toca lo registrado, los cuadres, la plata inicial ni la fecha de inicio.
+- Con el teclado abierto el contenido se achica (imePadding) y en la pantalla del monto el botón Guardar queda fijo encima del teclado.
+- No se hizo el 11.2 (subcréditos de un rotativo). Sí está el 11.1 (saldo estimado con intereses desde el extracto).
+- Base de datos versión 4: la migración crea tarjetas, pausas y pospuestos, y agrega columnas nuevas sin borrar nada. Marca la moto como incierta.

@@ -128,19 +128,29 @@ fun App(vm: AppViewModel) {
                     if (d == null) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                     } else {
-                        NavHost(nav, startDestination = "registrar", modifier = Modifier.padding(padding)) {
+                        // con el teclado abierto el contenido se achica y se puede llegar a Guardar
+                        NavHost(nav, startDestination = "registrar", modifier = Modifier.padding(padding).consumeWindowInsets(padding).imePadding()) {
                             composable("registrar") {
-                                PantallaRegistrar(vm, d, { nav.navigate("gasto") }, { nav.navigate("ingreso") }, { nav.navigate("monto") }, { nav.navigate("deudas") }) { o -> nav.navigate("obligacion/" + Uri.encode(o.clave)) }
+                                PantallaRegistrar(vm, d, { nav.navigate("gasto") }, { nav.navigate("ingreso") }, { nav.navigate("monto") }, { nav.navigate("deudas") },
+                                    { o -> nav.navigate("obligacion/" + Uri.encode(o.clave)) }, { nav.navigate("posponer") },
+                                    { vm.usarPuente = true; nav.navigate("gasto") }, { nav.navigate("sueldo") })
                             }
                             composable("inicio") {
-                                PantallaInicio(vm, d, { nav.navigate("monto") }, { nav.navigate("deudas") }, { irPestana(nav, "calendario") }) { o -> nav.navigate("obligacion/" + Uri.encode(o.clave)) }
+                                PantallaInicio(vm, d, { nav.navigate("monto") }, { nav.navigate("deudas") }, { irPestana(nav, "calendario") },
+                                    { o -> nav.navigate("obligacion/" + Uri.encode(o.clave)) }, { nav.navigate("posponer") },
+                                    { vm.usarPuente = true; nav.navigate("gasto") },
+                                    {
+                                        val moto = d.categorias.firstOrNull { it.tipo == com.jonathan.miscuentas.dominio.TipoEtiqueta.INGRESO && it.nombre == "Moto" }
+                                        if (moto != null) { vm.seleccion = Seleccion.IngresoEtiqueta(moto); nav.navigate("monto") } else nav.navigate("ingreso")
+                                    },
+                                    { nav.navigate("sueldo") }, { id -> nav.navigate("editar/${TipoLista.PRESUPUESTO}/$id") })
                             }
                             composable("calendario") { PantallaCalendario(vm, d) { o -> nav.navigate("obligacion/" + Uri.encode(o.clave)) } }
                             composable("movimientos") {
                                 PantallaMovimientos(vm, d, { r -> nav.navigate("registro/${r.id}") }, ::borrarConDeshacer)
                             }
                             composable("mas") {
-                                PantallaMas({ nav.navigate("deudas") }, { nav.navigate("lista/$it") }, { nav.navigate("reparto") }, { nav.navigate("config") }, { nav.navigate("datos") }, { nav.navigate("fechas") }, { nav.navigate("cuentas") })
+                                PantallaMas({ nav.navigate("deudas") }, { nav.navigate("lista/$it") }, { nav.navigate("reparto") }, { nav.navigate("config") }, { nav.navigate("datos") }, { nav.navigate("fechas") }, { nav.navigate("cuentas") }, { nav.navigate("tarjetas") })
                             }
                             composable("gasto") { PantallaEtiquetasGasto(vm, d, { nav.popBackStack() }, { nav.navigate("monto") }) }
                             composable("ingreso") { PantallaEtiquetasIngreso(vm, d, { nav.popBackStack() }, { nav.navigate("monto") }) }
@@ -149,6 +159,8 @@ fun App(vm: AppViewModel) {
                                     nav.popBackStack("registrar", inclusive = false)
                                     if (nav.currentDestination?.route != "registrar") irPestana(nav, "registrar")
                                     mensaje(texto)
+                                    // al guardar un sueldo se abre la lista de lo que hay que hacer
+                                    if (vm.abrirSueldo) { vm.abrirSueldo = false; nav.navigate("sueldo") }
                                 }
                             }
                             composable("deudas") {
@@ -183,6 +195,9 @@ fun App(vm: AppViewModel) {
                             }
                             composable("fechas") { PantallaFechasPago(vm, d) { nav.popBackStack() } }
                             composable("cuentas") { PantallaListaCuentas(vm, d) { nav.popBackStack() } }
+                            composable("tarjetas") { PantallaTarjetas(vm, d) { nav.popBackStack() } }
+                            composable("posponer") { PantallaPosponer(vm, d) { nav.popBackStack() } }
+                            composable("sueldo") { PantallaSueldo(vm, d, { nav.popBackStack() }, { nav.navigate("monto") }, { nav.navigate("posponer") }) }
                             composable("reparto") { PantallaReparto(vm, d) { nav.popBackStack() } }
                             composable("config") { PantallaConfig(vm, d, { nav.popBackStack() }, ::pedirPermiso) }
                             composable("datos") {
@@ -199,14 +214,14 @@ fun App(vm: AppViewModel) {
                                     actualizar = {
                                         confirmador.preguntar(
                                             "Actualizar deudas y gastos",
-                                            "Se cambian las deudas, gastos fijos, presupuestos, ingresos programados y eventos por los de esta versión. Lo que registraste se conserva y antes se guarda un respaldo.",
+                                            "Se cambian deudas, extractos, gastos fijos, presupuestos, ingresos programados, eventos, tarjetas, pausas, pospuestos, cuentas y la configuración del plan por los de esta versión. Lo que registraste se conserva y antes se guarda un respaldo.",
                                             "Actualizar",
                                         ) {
                                             scope.launch {
                                                 val res = vm.actualizarDesdeArchivo()
                                                 resultadoImport = when {
                                                     res == null -> "Esta versión no trae datos propios para actualizar."
-                                                    res.errores.isEmpty() -> "Listo: deudas, gastos fijos, presupuestos, ingresos y eventos actualizados. Tus registros se conservaron."
+                                                    res.errores.isEmpty() -> "Listo: datos del plan actualizados. Tus registros se conservaron."
                                                     else -> "Actualizado con ${res.errores.size} líneas con error:\n" + res.errores.take(20).joinToString("\n")
                                                 }
                                             }

@@ -31,12 +31,13 @@ object TipoLista {
 }
 
 @Composable
-fun PantallaMas(irDeudas: () -> Unit, irLista: (String) -> Unit, irReparto: () -> Unit, irConfig: () -> Unit, irDatos: () -> Unit, irFechas: () -> Unit, irCuentas: () -> Unit) {
+fun PantallaMas(irDeudas: () -> Unit, irLista: (String) -> Unit, irReparto: () -> Unit, irConfig: () -> Unit, irDatos: () -> Unit, irFechas: () -> Unit, irCuentas: () -> Unit, irTarjetas: () -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Text("Más", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
         OpcionMenu("📆", "Fechas de pago", "Ver y corregir el día de pago de todo", irFechas)
         OpcionMenu("🏦", "Cuentas", "Davivienda, Nequi, efectivo…", irCuentas)
+        OpcionMenu("💳", "Tarjetas", "Cupos, cuotas y cuáles usar de puente", irTarjetas)
         OpcionMenu("💳", "Deudas", "Saldos, simulador y plan de ataque", irDeudas)
         OpcionMenu("🏠", "Gastos fijos", "Arriendo, servicios, semanales…") { irLista(TipoLista.GASTO) }
         OpcionMenu("🎯", "Presupuestos", "Topes por quincena, mes o rango") { irLista(TipoLista.PRESUPUESTO) }
@@ -79,7 +80,8 @@ fun PantallaLista(vm: AppViewModel, datos: Datos, tipo: String, alVolver: () -> 
                             else -> "día ${g.diaPago ?: 1}"
                         }
                         ItemLista(g.nombre, "${Formato.pesos(g.valor)} · $cuando · quincena ${g.quincenaAsignada}" +
-                            (if (!g.diaConfirmado) " · ⚠ confirma este día" else "") + (if (!g.activo) " · inactivo" else "")) { irEditar(g.id) }
+                            (if (!g.diaConfirmado) " · ⚠ confirma este día" else "") + (if (!g.activo) " · inactivo" else "") +
+                            (Obligaciones.pausaDe(datos, Origen.GASTO, g.id, LocalDate.now())?.let { " · ⏸ pausado hasta ${Formato.fecha(it.hasta)}" } ?: "")) { irEditar(g.id) }
                     }
                 }
                 TipoLista.PRESUPUESTO -> {
@@ -142,7 +144,7 @@ fun PantallaEditar(vm: AppViewModel, datos: Datos, tipo: String, id: String, alV
         Encabezado((if (id == "nuevo") "Nuevo: " else "Editar: ") + TipoLista.titulo(tipo).lowercase(), alVolver)
         Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
             when (tipo) {
-                TipoLista.GASTO -> EditarGasto(vm, datos.gastosFijos.firstOrNull { it.id == id }, alVolver) { g ->
+                TipoLista.GASTO -> EditarGasto(vm, datos, datos.gastosFijos.firstOrNull { it.id == id }, alVolver) { g ->
                     confirmar.preguntar("Borrar", "¿Borrar ${g.nombre}?") { vm.borrar(g); alVolver() }
                 }
                 TipoLista.PRESUPUESTO -> EditarPresupuesto(vm, datos, datos.presupuestos.firstOrNull { it.id == id }, alVolver) { p ->
@@ -180,7 +182,7 @@ private fun BotonesGuardar(puede: Boolean, existe: Boolean, guardar: () -> Unit,
 }
 
 @Composable
-private fun EditarGasto(vm: AppViewModel, g: GastoFijo?, alVolver: () -> Unit, borrar: (GastoFijo) -> Unit) {
+private fun EditarGasto(vm: AppViewModel, datos: Datos, g: GastoFijo?, alVolver: () -> Unit, borrar: (GastoFijo) -> Unit) {
     var nombre by remember { mutableStateOf(g?.nombre ?: "") }
     var valor by remember { mutableStateOf(g?.valor) }
     var frecuencia by remember { mutableStateOf(g?.frecuencia ?: Frecuencia.MENSUAL) }
@@ -215,6 +217,7 @@ private fun EditarGasto(vm: AppViewModel, g: GastoFijo?, alVolver: () -> Unit, b
         ))
         alVolver()
     }) { g?.let(borrar) }
+    if (g != null) SeccionPausas(vm, datos, Origen.GASTO, g.id)
 }
 
 @Composable
@@ -246,6 +249,15 @@ private fun EditarPresupuesto(vm: AppViewModel, datos: Datos, p: Presupuesto?, a
         ))
         alVolver()
     }) { p?.let(borrar) }
+    if (p != null) {
+        // lo que de verdad se gasta por periodo para ajustar el presupuesto
+        Proyecciones.promedioGastado(datos, p.id, vm.hoy())?.let { prom ->
+            TituloSeccion("Gasto real")
+            Text("Tu gasto real es ${Formato.pesos(prom)} por periodo (promedio de los últimos periodos completos).", fontSize = 13.sp)
+            if (prom != p.monto && prom > 0) OutlinedButton(onClick = { vm.guardar(p.copy(monto = prom)); alVolver() }) { Text("Ajustar el presupuesto a ${Formato.pesos(prom)}") }
+        }
+        SeccionPausas(vm, datos, Origen.PRESUPUESTO, p.id)
+    }
 }
 
 @Composable
@@ -257,6 +269,7 @@ private fun EditarProgramado(vm: AppViewModel, i: IngresoProgramado?, alVolver: 
     var fecha by remember { mutableStateOf(Fechas.leer(i?.fecha)) }
     var tipo by remember { mutableStateOf(i?.tipo ?: TipoIngreso.SALARIO) }
     var estimado by remember { mutableStateOf(i?.esEstimado ?: false) }
+    var incierto by remember { mutableStateOf(i?.esIncierto ?: false) }
     var activo by remember { mutableStateOf(i?.activo ?: true) }
     var notas by remember { mutableStateOf(i?.notas ?: "") }
     CampoTexto("Nombre", nombre, { nombre = it })
@@ -268,6 +281,8 @@ private fun EditarProgramado(vm: AppViewModel, i: IngresoProgramado?, alVolver: 
     Text("Tipo", fontSize = 13.sp)
     SelectorChips(TipoIngreso.todos.map { it to it }, tipo) { tipo = it }
     Interruptor("Es estimado", estimado) { estimado = it }
+    if (tipo == TipoIngreso.MOTO) Text("La moto siempre es incierta: no cuenta en la proyección.", fontSize = 12.sp)
+    else Interruptor("Es incierto (puede no llegar, no cuenta en la proyección)", incierto) { incierto = it }
     Interruptor("Activo", activo) { activo = it }
     CampoTexto("Notas", notas, { notas = it }, lineas = 2)
     BotonesGuardar(nombre.isNotBlank() && (monto ?: 0) > 0 && (frecuencia != FrecuenciaIngreso.UNICO || fecha != null), i != null, {
@@ -275,7 +290,7 @@ private fun EditarProgramado(vm: AppViewModel, i: IngresoProgramado?, alVolver: 
             nombre = nombre.trim(), monto = monto ?: 0, frecuencia = frecuencia,
             dia = if (frecuencia == FrecuenciaIngreso.UNICO) null else dia.toIntOrNull()?.coerceIn(1, 31) ?: 15,
             fecha = if (frecuencia == FrecuenciaIngreso.UNICO) fecha?.let { Fechas.iso(it) } else null,
-            tipo = tipo, esEstimado = estimado, activo = activo, notas = notas,
+            tipo = tipo, esEstimado = estimado, activo = activo, notas = notas, esIncierto = incierto || tipo == TipoIngreso.MOTO,
         ))
         alVolver()
     }) { i?.let(borrar) }
@@ -353,6 +368,11 @@ fun PantallaConfig(vm: AppViewModel, datos: Datos, alVolver: () -> Unit, pedirPe
     var hora by remember { mutableStateOf(c.horaAviso) }
     var noche by remember { mutableStateOf(c.recordatorioDiario) }
     var semanas by remember { mutableStateOf(String.format(java.util.Locale.US, "%.4f", c.semanasPorMes)) }
+    var bolsilloCuenta by remember { mutableStateOf(c.bolsilloCuenta ?: "") }
+    var bolsilloMonto by remember { mutableStateOf<Long?>(c.bolsilloMonto) }
+    var bolsilloDia by remember { mutableStateOf(c.bolsilloDia?.toString() ?: "") }
+    var meta by remember { mutableStateOf<Long?>(c.metaColchon) }
+    var colchonCuenta by remember { mutableStateOf(c.colchonCuenta ?: "") }
     Column(Modifier.fillMaxSize()) {
         Encabezado("Configuración", alVolver)
         Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
@@ -363,6 +383,14 @@ fun PantallaConfig(vm: AppViewModel, datos: Datos, alVolver: () -> Unit, pedirPe
             CampoTexto("Semanas por mes", semanas, { semanas = it }, numerico = true)
             Interruptor("Aviso a las 9:00 p. m.: ¿registraste tus gastos?", noche) { noche = it }
             TextButton(onClick = pedirPermiso) { Text("Permitir notificaciones") }
+            TituloSeccion("Bolsillo para la otra quincena")
+            val opcionesCuenta = listOf("" to "Ninguna") + datos.cuentas.filter { it.activa }.map { it.id to "${it.emoji} ${it.nombre}" }
+            SelectorChips(opcionesCuenta, bolsilloCuenta) { bolsilloCuenta = it }
+            CampoPesos("Cuánto apartar", bolsilloMonto, { bolsilloMonto = it })
+            CampoTexto("Con el sueldo del día (ej. 30)", bolsilloDia, { bolsilloDia = it.filter { ch -> ch.isDigit() }.take(2) }, numerico = true)
+            TituloSeccion("Colchón de emergencia")
+            SelectorChips(opcionesCuenta, colchonCuenta) { colchonCuenta = it }
+            CampoPesos("Meta del colchón", meta, { meta = it })
             Spacer(Modifier.height(10.dp))
             Button(modifier = Modifier.fillMaxWidth().height(52.dp), onClick = {
                 // acepta 7:00 o 07:00 y lo guarda como 07:00
@@ -371,6 +399,8 @@ fun PantallaConfig(vm: AppViewModel, datos: Datos, alVolver: () -> Unit, pedirPe
                     plataInicial = plata ?: 0, fechaInicio = inicio?.let { Fechas.iso(it) } ?: c.fechaInicio,
                     diasAviso = dias.toIntOrNull() ?: c.diasAviso, horaAviso = horaOk?.toString() ?: c.horaAviso,
                     semanasPorMes = semanas.replace(',', '.').toDoubleOrNull()?.takeIf { it > 0 } ?: c.semanasPorMes, recordatorioDiario = noche,
+                    bolsilloCuenta = bolsilloCuenta.ifBlank { null }, bolsilloMonto = bolsilloMonto ?: 0, bolsilloDia = bolsilloDia.toIntOrNull()?.coerceIn(1, 31),
+                    metaColchon = meta ?: 0, colchonCuenta = colchonCuenta.ifBlank { null },
                 ))
                 alVolver()
             }) { Text("Guardar") }
@@ -408,7 +438,7 @@ fun PantallaDatos(exportar: () -> Unit, importar: () -> Unit, actualizar: () -> 
             Spacer(Modifier.height(12.dp))
             Tarjeta {
                 Text("Actualizar deudas y gastos fijos", fontWeight = FontWeight.Bold)
-                Text("Toma las deudas, gastos fijos, presupuestos, ingresos programados y eventos de la versión instalada. Tus gastos, ingresos y pagos registrados se conservan.", fontSize = 13.sp)
+                Text("Toma deudas, gastos fijos, presupuestos, ingresos programados, eventos, tarjetas, pausas, pospuestos, cuentas y la configuración del plan de la versión instalada. Tus gastos, ingresos, pagos y cuadres se conservan.", fontSize = 13.sp)
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(onClick = actualizar, Modifier.fillMaxWidth()) { Text("🔄 Actualizar desde la app") }
             }

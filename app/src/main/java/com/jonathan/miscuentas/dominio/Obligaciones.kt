@@ -9,6 +9,8 @@ object Origen {
     const val PRESUPUESTO = "presupuesto"
     const val EVENTO = "evento"
     const val INGRESO = "ingreso"
+    // lo que hay que pagar de una compra con tarjeta
+    const val PUENTE = "puente"
 }
 
 object Estado {
@@ -35,6 +37,8 @@ data class Obligacion(
     // lo que se pensaba pagar antes de pagarlo completo por otro valor
     val estimado: Long = presupuestado,
     val liquidada: Boolean = false,
+    // si se pospuso, la fecha que tenia antes
+    val fechaOriginal: LocalDate? = null,
 ) {
     val mes: YearMonth get() = YearMonth.from(fecha)
     val falta: Long get() = maxOf(0, presupuestado - pagado)
@@ -54,6 +58,8 @@ data class IngresoEsperado(
     val monto: Long,
     val recibido: Long,
     val esEstimado: Boolean,
+    // moto y similares: puede no llegar
+    val esIncierto: Boolean = false,
 )
 
 object Obligaciones {
@@ -68,10 +74,31 @@ object Obligaciones {
         // se arma el mes completo para que los pagos caigan en su semana o quincena y no en la del rango
         val md = maxOf(YearMonth.from(d).atDay(1), inicio)
         val mh = YearMonth.from(hasta).atEndOfMonth()
+        // orden: mes completo, quitar pausados, traer pospuestos, cruzar pagos, mover fechas y recortar
+        val base = generarBase(datos, md, mh, inicio).filterNot { pausado(datos, it) }.toMutableList()
+        val claves = base.map { it.clave }.toSet()
+        datos.pospuestos.forEach { p ->
+            val nueva = Fechas.leer(p.fechaNueva) ?: return@forEach
+            val original = Fechas.leer(p.clave.substringAfterLast(':')) ?: return@forEach
+            if (p.clave in claves || nueva !in md..mh || original < inicio) return@forEach
+            val ym = YearMonth.from(original)
+            generarBase(datos, maxOf(ym.atDay(1), inicio), ym.atEndOfMonth(), inicio)
+                .firstOrNull { it.clave == p.clave && !pausado(datos, it) }?.let { base += it }
+        }
+        val nuevas = datos.pospuestos.associate { it.clave to Fechas.leer(it.fechaNueva) }
+        return conPagos(base, datos.movimientos)
+            .map { o -> nuevas[o.clave]?.let { f -> o.copy(fecha = f, fechaOriginal = o.fecha) } ?: o }
+            .filter { it.fecha in d..hasta }
+            .sortedWith(compareBy({ it.fecha }, { it.concepto }))
+    }
+
+    // pagos del rango sin pausas, pospuestos ni lo pagado
+    private fun generarBase(datos: Datos, md: LocalDate, mh: LocalDate, inicio: LocalDate): List<Obligacion> {
         val base = mutableListOf<Obligacion>()
         datos.deudas.filter { it.activa }.forEach { base += deThisDeuda(it, md, mh, inicio) }
         datos.gastosFijos.filter { it.activo }.forEach { base += deGasto(it, md, mh, datos.config) }
-        datos.presupuestos.filter { it.activo }.forEach { base += dePresupuesto(it, md, mh) }
+        val dias = diasSueldo(datos)
+        datos.presupuestos.filter { it.activo }.forEach { base += dePresupuesto(it, md, mh, dias) }
         datos.eventos.forEach { ev ->
             val f = Fechas.leer(ev.fecha) ?: return@forEach
             if (f in md..mh) {
@@ -81,8 +108,21 @@ object Obligaciones {
                 )
             }
         }
-        return conPagos(base, datos.movimientos).filter { it.fecha in d..hasta }.sortedWith(compareBy({ it.fecha }, { it.concepto }))
+        datos.movimientos.filter { it.tarjetaId != null }.forEach { m ->
+            base += Tarjetas.puentes(datos, m).filter { it.fecha in md..mh }
+        }
+        return base
     }
+
+    fun pausado(datos: Datos, o: Obligacion): Boolean = datos.pausas.any { p ->
+        p.tipoOrigen == o.tipoOrigen && p.origenId == o.origenId &&
+            (Fechas.leer(p.desde)?.let { o.fecha >= it } ?: true) && (Fechas.leer(p.hasta)?.let { o.fecha <= it } ?: true)
+    }
+
+    // la pausa vigente o proxima de un origen, para mostrar "pausado hasta"
+    fun pausaDe(datos: Datos, tipo: String, id: String, hoy: LocalDate): Pausa? = datos.pausas
+        .filter { it.tipoOrigen == tipo && it.origenId == id && (Fechas.leer(it.hasta)?.let { h -> h >= hoy } ?: true) }
+        .minByOrNull { it.desde }
 
     private fun meses(desde: LocalDate, hasta: LocalDate): Sequence<YearMonth> =
         generateSequence(YearMonth.from(desde)) { it.plusMonths(1) }.takeWhile { it <= YearMonth.from(hasta) }
@@ -146,7 +186,8 @@ object Obligaciones {
         return lista
     }
 
-    private fun dePresupuesto(p: Presupuesto, desde: LocalDate, hasta: LocalDate): List<Obligacion> {
+    // con dos sueldos fijos el quincenal arranca en cada dia de sueldo y dura hasta el siguiente
+    private fun dePresupuesto(p: Presupuesto, desde: LocalDate, hasta: LocalDate, dias: List<Int>): List<Obligacion> {
         val lista = mutableListOf<Obligacion>()
         val pd = Fechas.leer(p.fechaDesde)
         val ph = Fechas.leer(p.fechaHasta)
@@ -161,7 +202,8 @@ object Obligaciones {
         }
         when (p.periodicidad) {
             Periodicidad.QUINCENAL -> meses(desde, hasta).forEach { ym ->
-                agregar(Fechas.diaEnMes(ym, 15)); agregar(ym.atEndOfMonth())
+                if (dias.size == 2) dias.forEach { agregar(Fechas.diaEnMes(ym, it)) }
+                else { agregar(Fechas.diaEnMes(ym, 15)); agregar(ym.atEndOfMonth()) }
             }
             Periodicidad.MENSUAL -> meses(desde, hasta).forEach { ym -> agregar(Fechas.diaEnMes(ym, pd?.dayOfMonth ?: 1)) }
             else -> (Fechas.leer(p.fecha) ?: pd)?.let { agregar(it) }
@@ -238,7 +280,10 @@ object Obligaciones {
         val ym = YearMonth.from(fecha)
         val delMes = generar(datos, ym.atDay(1), ym.atEndOfMonth()).filter { it.tipoOrigen == Origen.PRESUPUESTO && it.origenId == p.id }
         return when (p.periodicidad) {
-            Periodicidad.QUINCENAL -> delMes.firstOrNull { if (fecha.dayOfMonth <= 15) it.fecha.dayOfMonth == 15 else it.fecha.dayOfMonth > 15 }
+            Periodicidad.QUINCENAL -> if (diasSueldo(datos).size == 2) {
+                val ini = periodo(datos, fecha).desde
+                generar(datos, ini, ini).firstOrNull { it.tipoOrigen == Origen.PRESUPUESTO && it.origenId == p.id }
+            } else delMes.firstOrNull { if (fecha.dayOfMonth <= 15) it.fecha.dayOfMonth == 15 else it.fecha.dayOfMonth > 15 }
             Periodicidad.MENSUAL -> delMes.firstOrNull()
             else -> {
                 val desde = Fechas.leer(p.fechaDesde) ?: Fechas.leer(p.fecha)
@@ -263,7 +308,7 @@ object Obligaciones {
             fechas.filter { it in d..hasta }.forEach { f ->
                 val c = clave(Origen.INGRESO, ip.id, f)
                 val recibido = datos.ingresos.filter { it.claveIngresoProgramado == c }.sumOf { it.monto }
-                lista += IngresoEsperado(c, ip.id, f, ip.nombre, ip.tipo, ip.monto, recibido, ip.esEstimado)
+                lista += IngresoEsperado(c, ip.id, f, ip.nombre, ip.tipo, ip.monto, recibido, ip.esEstimado, ip.esIncierto || ip.tipo == TipoIngreso.MOTO)
             }
         }
         return lista.sortedBy { it.fecha }

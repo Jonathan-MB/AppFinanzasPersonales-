@@ -25,7 +25,7 @@ import java.time.YearMonth
 
 // un gasto o un ingreso en la misma lista
 // neutro: cuadres y envios entre cuentas, no son gasto ni ingreso
-data class Registro(val id: String, val fecha: String, val monto: Long, val esIngreso: Boolean, val titulo: String, val detalle: String, val tipo: String, val categoria: String, val original: Any, val neutro: Boolean = false, val montoTexto: String? = null)
+data class Registro(val id: String, val fecha: String, val monto: Long, val esIngreso: Boolean, val titulo: String, val detalle: String, val tipo: String, val categoria: String, val original: Any, val neutro: Boolean = false, val montoTexto: String? = null, val conTarjeta: Boolean = false)
 
 fun registros(datos: Datos): List<Registro> {
     val etiquetas = datos.categorias.associateBy { it.nombre }
@@ -34,7 +34,11 @@ fun registros(datos: Datos): List<Registro> {
     val gastos = datos.movimientos.map { m ->
         val nombre = m.claveObligacion?.let { c -> obligacionNombre(datos, c) } ?: m.categoria.ifBlank { "Gasto" }
         val emoji = etiquetas[m.categoria]?.emoji ?: if (m.tipo == TipoMovimiento.ABONO_EXTRA) "⬇️" else "💸"
-        Registro(m.id, m.fecha, m.monto, false, "$emoji $nombre", conCuenta(m.cuentaId, m.nota), m.tipo, m.categoria, m)
+        val tarjeta = m.tarjetaId?.let { t -> datos.tarjetas.firstOrNull { it.id == t } }
+        val detalle = if (m.tarjetaId != null) listOf("💳 ${tarjeta?.nombre ?: "tarjeta"} · ${m.cuotas ?: 1} cuota" + (if ((m.cuotas ?: 1) > 1) "s" else "") +
+            (m.fechaPagoPuente?.let { " · pagar ${Formato.fecha(it)}" } ?: ""), m.nota).filter { it.isNotBlank() }.joinToString(" · ")
+            else conCuenta(m.cuentaId, m.nota)
+        Registro(m.id, m.fecha, m.monto, false, "$emoji $nombre", detalle, m.tipo, m.categoria, m, conTarjeta = m.tarjetaId != null)
     }
     val ingresos = datos.ingresos.map { i ->
         val emoji = etiquetas.values.firstOrNull { it.tipo == TipoEtiqueta.INGRESO && Semilla.tipoIngreso(it.nombre) == i.tipo }?.emoji ?: "💰"
@@ -120,7 +124,7 @@ fun PantallaMovimientos(vm: AppViewModel, datos: Datos, irEditar: (Registro) -> 
             val cats = base.map { it.categoria }.filter { it.isNotBlank() }.distinct().sorted()
             if (cats.size > 1) SelectorChips(listOf("" to "Todas") + cats.map { it to it }, categoria) { categoria = it }
         }
-        val gastos = lista.filter { !it.esIngreso && !it.neutro }.sumOf { it.monto }
+        val gastos = lista.filter { !it.esIngreso && !it.neutro && !it.conTarjeta }.sumOf { it.monto }
         val ingresos = lista.filter { it.esIngreso }.sumOf { it.monto }
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
             Text("Gastos ${Formato.pesos(gastos)}", Modifier.weight(1f), color = Colores.rojo, fontWeight = FontWeight.Bold)
@@ -172,7 +176,8 @@ fun PantallaEditarRegistro(vm: AppViewModel, datos: Datos, id: String, alVolver:
             CampoPesos("Monto", monto, { monto = it }, grande = true)
             CampoFecha("Fecha", fecha, { fecha = it })
             CampoTexto("Nota", nota, { nota = it })
-            SelectorCuenta(datos, if (mov != null) "¿De dónde salió?" else "¿A qué cuenta entró?", cuenta) { cuenta = it }
+            if (mov?.tarjetaId != null) Text("💳 Pagado con ${datos.tarjetas.firstOrNull { it.id == mov.tarjetaId }?.nombre ?: "tarjeta"} a ${mov.cuotas ?: 1} cuota(s): no salió de ninguna cuenta.", fontSize = 13.sp)
+            else SelectorCuenta(datos, if (mov != null) "¿De dónde salió?" else "¿A qué cuenta entró?", cuenta) { cuenta = it }
             if (mov != null) {
                 mov.claveObligacion?.let { c ->
                     val fechaPago = Fechas.leer(c.substringAfterLast(':'))?.let { " del " + Formato.fecha(Fechas.iso(it)) } ?: ""
@@ -194,7 +199,7 @@ fun PantallaEditarRegistro(vm: AppViewModel, datos: Datos, id: String, alVolver:
                 enabled = (monto ?: 0) > 0 && fecha != null,
                 onClick = {
                     val f = Fechas.iso(fecha!!)
-                    if (mov != null) vm.guardar(mov.copy(monto = monto!!, fecha = f, nota = nota, categoria = categoria, liquida = esRecibo && completo, cuentaId = cuenta))
+                    if (mov != null) vm.guardar(mov.copy(monto = monto!!, fecha = f, nota = nota, categoria = categoria, liquida = esRecibo && completo, cuentaId = if (mov.tarjetaId != null) null else cuenta))
                     else if (ing != null) vm.guardar(ing.copy(monto = monto!!, fecha = f, nota = nota, tipo = tipoIngreso, cuentaId = cuenta))
                     alVolver()
                 },

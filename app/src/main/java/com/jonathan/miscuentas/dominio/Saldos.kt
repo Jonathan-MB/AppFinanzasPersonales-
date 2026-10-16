@@ -21,7 +21,8 @@ object Saldos {
         val usadas = datos.movimientos.filter { it.cuentaId != null }.map { (it.createdAt.ifBlank { it.fecha }) to it.cuentaId } +
             datos.ingresos.filter { it.cuentaId != null }.map { (it.createdAt.ifBlank { it.fecha }) to it.cuentaId }
         val ultima = usadas.maxByOrNull { it.first }?.second
-        return if (ultima != null && activas(datos).any { it.id == ultima }) ultima else principal(datos)
+        // el bolsillo y el colchon no se proponen para gastar
+        return if (ultima != null && activas(datos).any { it.id == ultima && it.tipo == TipoCuenta.NORMAL }) ultima else principal(datos)
     }
 
     fun saldos(datos: Datos): Map<String, Long> {
@@ -29,11 +30,17 @@ object Saldos {
         val s = datos.cuentas.associate { it.id to 0L }.toMutableMap()
         s[p] = (s[p] ?: 0) + datos.config.plataInicial
         datos.ingresos.forEach { i -> cuentaDe(datos, i.cuentaId)?.let { s[it] = (s[it] ?: 0) + i.monto } }
-        datos.movimientos.forEach { m -> cuentaDe(datos, m.cuentaId)?.let { s[it] = (s[it] ?: 0) - m.monto } }
+        datos.movimientos.filter { it.tarjetaId == null }.forEach { m -> cuentaDe(datos, m.cuentaId)?.let { s[it] = (s[it] ?: 0) - m.monto } }
         datos.cuentaMovs.filter { it.tipo != TipoCuentaMov.CUADRE }.forEach { c ->
             cuentaDe(datos, c.cuentaId)?.let { s[it] = (s[it] ?: 0) + c.monto }
         }
         return s
+    }
+
+    // plata en las cuentas activas de un tipo (bolsillo o colchon)
+    fun deTipo(datos: Datos, tipo: String): Long {
+        val s = saldos(datos)
+        return datos.cuentas.filter { it.activa && it.tipo == tipo }.sumOf { s[it.id] ?: 0 }
     }
 
     // lo que hay que sumar a cada cuenta para que quede igual a lo que se tiene de verdad

@@ -20,6 +20,7 @@ class Repositorio(private val context: Context) {
         listOf(
             dao.config(), dao.deudas(), dao.deudaSaldos(), dao.gastosFijos(), dao.presupuestos(),
             dao.ingresosProgramados(), dao.eventos(), dao.movimientos(), dao.ingresos(), dao.categorias(), dao.cuentas(), dao.cuentaMovs(),
+            dao.tarjetas(), dao.pausas(), dao.pospuestos(),
         )
     ) { v ->
         val config = v[0] as Config? ?: return@combine null
@@ -36,6 +37,9 @@ class Repositorio(private val context: Context) {
             categorias = v[9] as List<Categoria>,
             cuentas = v[10] as List<Cuenta>,
             cuentaMovs = v[11] as List<CuentaMov>,
+            tarjetas = v[12] as List<Tarjeta>,
+            pausas = v[13] as List<Pausa>,
+            pospuestos = v[14] as List<Pospuesto>,
         )
     }
 
@@ -70,6 +74,9 @@ class Repositorio(private val context: Context) {
             is Categoria -> dao.guardar(v.copy(updatedAt = ahora, createdAt = v.createdAt.ifBlank { ahora }))
             is Cuenta -> dao.guardar(v.copy(updatedAt = ahora, createdAt = v.createdAt.ifBlank { ahora }))
             is CuentaMov -> dao.guardar(v.copy(updatedAt = ahora, createdAt = v.createdAt.ifBlank { ahora }))
+            is Tarjeta -> dao.guardar(v.copy(updatedAt = ahora, createdAt = v.createdAt.ifBlank { ahora }))
+            is Pausa -> dao.guardar(v.copy(updatedAt = ahora, createdAt = v.createdAt.ifBlank { ahora }))
+            is Pospuesto -> dao.guardar(v.copy(updatedAt = ahora, createdAt = v.createdAt.ifBlank { ahora }))
             is List<*> -> v.forEach { it?.let { x -> guardar(x) } }
         }
     }
@@ -87,6 +94,9 @@ class Repositorio(private val context: Context) {
             is Categoria -> dao.borrar(v)
             is Cuenta -> dao.borrar(v)
             is CuentaMov -> dao.borrar(v)
+            is Tarjeta -> dao.borrar(v)
+            is Pausa -> dao.borrar(v)
+            is Pospuesto -> dao.borrar(v)
             is List<*> -> v.forEach { it?.let { x -> borrar(x) } }
         }
     }

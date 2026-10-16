@@ -14,14 +14,17 @@ object Txt {
         "DEUDA_SALDOS" to "deuda_id|fecha|saldo|id",
         "GASTOS_FIJOS" to "id|nombre|valor|frecuencia|dia_pago|dia_semana|quincena_asignada|activo|notas|dia_confirmado",
         "PRESUPUESTOS" to "id|nombre|monto|periodicidad|fecha|fecha_desde|fecha_hasta|categoria|activo|notas",
-        "INGRESOS_PROGRAMADOS" to "id|nombre|monto|frecuencia|dia|fecha|tipo|es_estimado|activo|notas",
+        "INGRESOS_PROGRAMADOS" to "id|nombre|monto|frecuencia|dia|fecha|tipo|es_estimado|activo|notas|es_incierto",
         "EVENTOS" to "id|nombre|monto|fecha|categoria|deuda_id|notas",
-        "CALENDARIO" to "clave|fecha|concepto|categoria|presupuestado|pagado|falta|estado",
-        "MOVIMIENTOS" to "id|fecha|monto|tipo|clave_obligacion|categoria|deuda_id|nota|liquida|cuenta_id",
+        "CALENDARIO" to "clave|fecha|concepto|categoria|presupuestado|pagado|falta|estado|fecha_original",
+        "MOVIMIENTOS" to "id|fecha|monto|tipo|clave_obligacion|categoria|deuda_id|nota|liquida|cuenta_id|tarjeta_id|cuotas|fecha_pago_puente",
         "INGRESOS" to "id|fecha|monto|tipo|clave_ingreso_programado|nota|cuenta_id",
         "CATEGORIAS" to "nombre|es_sistema|emoji|tipo|orden|presupuesto_id|id",
-        "CUENTAS" to "id|nombre|emoji|orden|activa",
+        "CUENTAS" to "id|nombre|emoji|orden|activa|tipo",
         "CUENTA_MOVS" to "id|fecha|cuenta_id|monto|tipo|grupo|nota",
+        "TARJETAS" to "id|deuda_id|nombre|cupo_total|cupo_disponible|fecha_cupo|interes_1_cuota|cuotas_por_defecto|uso_permitido|solo_tiendas|preferida_puente|dia_corte|notas",
+        "PAUSAS" to "id|tipo_origen|origen_id|desde|hasta|nota",
+        "POSPUESTOS" to "clave|fecha_nueva|nota",
     )
 
     private fun limpio(v: Any?): String = when (v) {
@@ -69,6 +72,16 @@ object Txt {
         linea(fila("deuda_total_estimada", Calculos.deudaTotal(datos, hoy)))
         linea(fila("cuotas_mensuales", Calculos.cuotasMensuales(datos)))
         linea(fila("endeudamiento_pct", Calculos.endeudamiento(datos)?.let { String.format(java.util.Locale.US, "%.1f", it * 100) }))
+        val proy = Proyecciones.calcular(datos, hoy)
+        linea(fila("proximo_sueldo", Fechas.iso(proy.proximoSueldo)))
+        linea(fila("faltante_hasta_sueldo", proy.faltanteHastaSueldo))
+        linea(fila("libre_hasta_sueldo", proy.libreHastaSueldo))
+        linea(fila("puedes_gastar_dia", proy.puedesGastarPorDia))
+        linea(fila("minimo_proyectado", proy.minimo, Fechas.iso(proy.fechaMinimo)))
+        linea(fila("moto_para_cubrir", proy.faltanteHastaSueldo))
+        datos.tarjetas.sortedBy { it.id }.forEach { t -> linea(fila("cupo_disponible_" + t.id.removePrefix("t-"), Tarjetas.cupoDisponible(datos, t, hoy))) }
+        linea(fila("colchon", proy.colchon))
+        linea(fila("bolsillo", Saldos.deTipo(datos, TipoCuenta.BOLSILLO)))
         linea("")
 
         linea("[CONFIG]")
@@ -84,6 +97,11 @@ object Txt {
         linea(fila("modo_plan", c.modoPlan))
         linea(fila("nota_plan", c.notaPlan))
         linea(fila("ultimo_respaldo", c.ultimoRespaldo))
+        linea(fila("meta_colchon", c.metaColchon))
+        linea(fila("colchon_cuenta", c.colchonCuenta))
+        linea(fila("bolsillo_cuenta", c.bolsilloCuenta))
+        linea(fila("bolsillo_monto", c.bolsilloMonto))
+        linea(fila("bolsillo_dia", c.bolsilloDia))
         linea("")
 
         linea("[DEUDAS]"); linea(cabeceras.getValue("DEUDAS"))
@@ -109,7 +127,7 @@ object Txt {
         linea("")
         linea("[INGRESOS_PROGRAMADOS]"); linea(cabeceras.getValue("INGRESOS_PROGRAMADOS"))
         datos.ingresosProgramados.forEach { i ->
-            linea(fila(i.id, i.nombre, i.monto, i.frecuencia, i.dia, i.fecha, i.tipo, i.esEstimado, i.activo, i.notas))
+            linea(fila(i.id, i.nombre, i.monto, i.frecuencia, i.dia, i.fecha, i.tipo, i.esEstimado, i.activo, i.notas, i.esIncierto))
         }
         linea("")
         linea("[EVENTOS]"); linea(cabeceras.getValue("EVENTOS"))
@@ -119,12 +137,12 @@ object Txt {
         val inicio = Fechas.leer(c.fechaInicio) ?: hoy
         val finCal = YearMonth.from(hoy).plusMonths(3).atEndOfMonth()
         Obligaciones.generar(datos, inicio, finCal).forEach { o ->
-            linea(fila(o.clave, Fechas.iso(o.fecha), o.concepto, o.categoria, o.presupuestado, o.pagado, o.falta, o.estado(hoy)))
+            linea(fila(o.clave, Fechas.iso(o.fecha), o.concepto, o.categoria, o.presupuestado, o.pagado, o.falta, o.estado(hoy), o.fechaOriginal?.let { Fechas.iso(it) }))
         }
         linea("")
         linea("[MOVIMIENTOS]"); linea(cabeceras.getValue("MOVIMIENTOS"))
         datos.movimientos.sortedWith(compareBy({ it.fecha }, { it.id })).forEach { m ->
-            linea(fila(m.id, m.fecha, m.monto, m.tipo, m.claveObligacion, m.categoria, m.deudaId, m.nota, m.liquida, m.cuentaId))
+            linea(fila(m.id, m.fecha, m.monto, m.tipo, m.claveObligacion, m.categoria, m.deudaId, m.nota, m.liquida, m.cuentaId, m.tarjetaId, m.cuotas, m.fechaPagoPuente))
         }
         linea("")
         linea("[INGRESOS]"); linea(cabeceras.getValue("INGRESOS"))
@@ -138,25 +156,47 @@ object Txt {
         }
         linea("")
         linea("[CUENTAS]"); linea(cabeceras.getValue("CUENTAS"))
-        datos.cuentas.sortedBy { it.orden }.forEach { k -> linea(fila(k.id, k.nombre, k.emoji, k.orden, k.activa)) }
+        datos.cuentas.sortedBy { it.orden }.forEach { k -> linea(fila(k.id, k.nombre, k.emoji, k.orden, k.activa, k.tipo)) }
         linea("")
         linea("[CUENTA_MOVS]"); linea(cabeceras.getValue("CUENTA_MOVS"))
         datos.cuentaMovs.sortedWith(compareBy({ it.fecha }, { it.id })).forEach { m ->
             linea(fila(m.id, m.fecha, m.cuentaId, m.monto, m.tipo, m.grupo, m.nota))
         }
         linea("")
+        linea("[TARJETAS]"); linea(cabeceras.getValue("TARJETAS"))
+        datos.tarjetas.sortedBy { it.id }.forEach { t ->
+            linea(fila(t.id, t.deudaId, t.nombre, t.cupoTotal, t.cupoDisponible, t.fechaCupo, t.interes1Cuota, t.cuotasPorDefecto,
+                t.usoPermitido, t.soloTiendas, t.preferidaPuente, t.diaCorte, t.notas))
+        }
+        linea("")
+        linea("[PAUSAS]"); linea(cabeceras.getValue("PAUSAS"))
+        datos.pausas.sortedBy { it.id }.forEach { p -> linea(fila(p.id, p.tipoOrigen, p.origenId, p.desde, p.hasta, p.nota)) }
+        linea("")
+        linea("[POSPUESTOS]"); linea(cabeceras.getValue("POSPUESTOS"))
+        datos.pospuestos.sortedBy { it.clave }.forEach { p -> linea(fila(p.clave, p.fechaNueva, p.nota)) }
+        linea("")
         linea("#FIN")
         return sb.toString()
     }
 
-    // toma del archivo solo lo que se planea (deudas, gastos, presupuestos, ingresos y eventos)
-    // y deja lo registrado, la configuracion y las etiquetas como estan
+    // toma del archivo solo lo que se planea (deudas, extractos, gastos, presupuestos, ingresos, eventos,
+    // tarjetas, pausas, pospuestos, cuentas y la configuracion del plan) y deja lo registrado como esta
     fun actualizarBase(texto: String, actuales: Datos, ahora: String = Fechas.ahora()): ResultadoImport {
         val res = importar(texto, actuales, ahora)
         val d = res.datos
+        val c = d.config
+        // las cuentas del archivo reemplazan por id; las que solo existen en la app se quedan
+        val cuentas = d.cuentas + actuales.cuentas.filter { a -> d.cuentas.none { it.id == a.id } }
         return res.copy(datos = actuales.copy(
-            deudas = d.deudas, gastosFijos = d.gastosFijos, presupuestos = d.presupuestos,
+            config = actuales.config.copy(
+                diasAviso = c.diasAviso, horaAviso = c.horaAviso, semanasPorMes = c.semanasPorMes,
+                recordatorioDiario = c.recordatorioDiario, modoPlan = c.modoPlan, notaPlan = c.notaPlan,
+                metaColchon = c.metaColchon, colchonCuenta = c.colchonCuenta, bolsilloCuenta = c.bolsilloCuenta,
+                bolsilloMonto = c.bolsilloMonto, bolsilloDia = c.bolsilloDia, updatedAt = ahora,
+            ),
+            deudas = d.deudas, deudaSaldos = d.deudaSaldos, gastosFijos = d.gastosFijos, presupuestos = d.presupuestos,
             ingresosProgramados = d.ingresosProgramados, eventos = d.eventos,
+            tarjetas = d.tarjetas, pausas = d.pausas, pospuestos = d.pospuestos, cuentas = cuentas,
         ))
     }
 
@@ -228,6 +268,11 @@ object Txt {
                     modoPlan = mapa["modo_plan"]?.ifBlank { null } ?: config.modoPlan,
                     notaPlan = mapa["nota_plan"] ?: config.notaPlan,
                     ultimoRespaldo = if (mapa.containsKey("ultimo_respaldo")) mapa["ultimo_respaldo"]?.ifBlank { null } else config.ultimoRespaldo,
+                    metaColchon = mapa["meta_colchon"]?.trim()?.toLongOrNull() ?: config.metaColchon,
+                    colchonCuenta = if (mapa.containsKey("colchon_cuenta")) mapa["colchon_cuenta"]?.ifBlank { null } else config.colchonCuenta,
+                    bolsilloCuenta = if (mapa.containsKey("bolsillo_cuenta")) mapa["bolsillo_cuenta"]?.ifBlank { null } else config.bolsilloCuenta,
+                    bolsilloMonto = mapa["bolsillo_monto"]?.trim()?.toLongOrNull() ?: config.bolsilloMonto,
+                    bolsilloDia = if (mapa.containsKey("bolsillo_dia")) mapa["bolsillo_dia"]?.trim()?.toIntOrNull() else config.bolsilloDia,
                     updatedAt = ahora,
                 )
             } catch (e: Exception) {
@@ -257,24 +302,39 @@ object Txt {
         }
         val programados = leer("INGRESOS_PROGRAMADOS") { c ->
             IngresoProgramado(requerido(c.s(0), "id"), requerido(c.s(1), "nombre"), c.l(2), c.s(3).ifBlank { FrecuenciaIngreso.MENSUAL },
-                c.i(4), fechaOk(c.sn(5)), c.s(6).ifBlank { TipoIngreso.OTRO }, c.b(7, false), c.b(8, true), c.s(9), ahora, ahora)
+                c.i(4), fechaOk(c.sn(5)), c.s(6).ifBlank { TipoIngreso.OTRO }, c.b(7, false), c.b(8, true), c.s(9), ahora, ahora,
+                // la moto siempre es incierta
+                esIncierto = c.b(10, false) || c.s(6).trim() == TipoIngreso.MOTO)
         }
         val eventos = leer("EVENTOS") { c ->
             Evento(requerido(c.s(0), "id"), requerido(c.s(1), "nombre"), c.l(2), fechaOk(requerido(c.s(3), "fecha"))!!, c.s(4), c.sn(5), c.s(6), ahora, ahora)
         }
         val movimientos = leer("MOVIMIENTOS") { c ->
             Movimiento(requerido(c.s(0), "id"), fechaOk(requerido(c.s(1), "fecha"))!!, c.l(2), c.s(7), c.sn(4),
-                c.s(3).ifBlank { TipoMovimiento.NO_PLANEADO }, c.s(5), c.sn(6), ahora, ahora, liquida = c.b(8, false), cuentaId = c.sn(9))
+                c.s(3).ifBlank { TipoMovimiento.NO_PLANEADO }, c.s(5), c.sn(6), ahora, ahora, liquida = c.b(8, false), cuentaId = c.sn(9),
+                tarjetaId = c.sn(10), cuotas = c.i(11), fechaPagoPuente = fechaOk(c.sn(12)))
         }
         val ingresos = leer("INGRESOS") { c ->
             Ingreso(requerido(c.s(0), "id"), fechaOk(requerido(c.s(1), "fecha"))!!, c.l(2), c.s(3).ifBlank { TipoIngreso.OTRO }, c.s(5), c.sn(4), ahora, ahora, cuentaId = c.sn(6))
         }
         val cuentas = leer("CUENTAS") { c ->
-            Cuenta(requerido(c.s(0), "id"), requerido(c.s(1), "nombre"), c.s(2).ifBlank { "🏦" }, c.i(3) ?: 0, c.b(4, true), ahora, ahora)
+            Cuenta(requerido(c.s(0), "id"), requerido(c.s(1), "nombre"), c.s(2).ifBlank { "🏦" }, c.i(3) ?: 0, c.b(4, true), ahora, ahora,
+                c.s(5).trim().takeIf { it in TipoCuenta.todos } ?: TipoCuenta.NORMAL)
         }
         val cuentaMovs = leer("CUENTA_MOVS") { c ->
             // la marca del cuadre no tiene cuenta
             CuentaMov(requerido(c.s(0), "id"), fechaOk(requerido(c.s(1), "fecha"))!!, c.s(2), c.l(3), requerido(c.s(4), "tipo"), c.sn(5), c.s(6), ahora, ahora)
+        }
+        val tarjetas = leer("TARJETAS") { c ->
+            Tarjeta(requerido(c.s(0), "id"), c.sn(1), requerido(c.s(2), "nombre"), c.ln(3), c.ln(4), fechaOk(c.sn(5)), c.b(6, true), c.i(7),
+                c.b(8, true), c.b(9, false), c.b(10, false), c.i(11), c.s(12), ahora, ahora)
+        }
+        val pausas = leer("PAUSAS") { c ->
+            Pausa(requerido(c.s(0), "id"), requerido(c.s(1), "tipo_origen"), requerido(c.s(2), "origen_id"),
+                fechaOk(requerido(c.s(3), "desde"))!!, fechaOk(requerido(c.s(4), "hasta"))!!, c.s(5), ahora, ahora)
+        }
+        val pospuestos = leer("POSPUESTOS") { c ->
+            Pospuesto(requerido(c.s(0), "clave"), fechaOk(requerido(c.s(1), "fecha_nueva"))!!, c.s(2), ahora, ahora)
         }
         val categorias = leer("CATEGORIAS") { c ->
             Categoria(c.sn(6) ?: nuevoId(), requerido(c.s(0), "nombre"), c.b(1, false), c.s(2).ifBlank { "🏷" },
@@ -294,6 +354,9 @@ object Txt {
             categorias = categorias ?: actuales.categorias,
             cuentas = cuentas ?: actuales.cuentas,
             cuentaMovs = cuentaMovs ?: actuales.cuentaMovs,
+            tarjetas = tarjetas ?: actuales.tarjetas,
+            pausas = pausas ?: actuales.pausas,
+            pospuestos = pospuestos ?: actuales.pospuestos,
         )
         return ResultadoImport(datos, errores, secciones.keys)
     }
